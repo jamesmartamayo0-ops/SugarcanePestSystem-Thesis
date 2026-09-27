@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -8,10 +9,37 @@ from sqlalchemy.engine import URL
 
 class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SESSION_COOKIE_NAME = "sugarcane_session"
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_PATH = "/"
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
+    SESSION_REFRESH_EACH_REQUEST = False
     CORS_ORIGINS = (
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     )
+
+
+def validate_secret_key(value: str | None) -> str:
+    if not value or not value.strip():
+        raise ValueError("A strong SECRET_KEY must be configured.")
+
+    normalized = "".join(character for character in value.lower() if character.isalnum())
+    placeholder_markers = ("changeme", "replaceme", "placeholder", "example", "yoursecret", "secretkey")
+    if any(marker in normalized for marker in placeholder_markers):
+        raise ValueError("A strong SECRET_KEY must be configured.")
+    return value
+
+
+def session_cookie_secure_from_env(value: str | None) -> bool:
+    if value is None:
+        return False
+    if value.strip().lower() == "true":
+        return True
+    if value.strip().lower() == "false":
+        return False
+    raise ValueError("SESSION_COOKIE_SECURE must be true or false.")
 
 
 def configure_app(app: Flask) -> None:
@@ -19,7 +47,10 @@ def configure_app(app: Flask) -> None:
 
     password = os.getenv("DB_PASSWORD") or None
     app.config.from_object(Config)
-    app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
+    app.config["SECRET_KEY"] = validate_secret_key(os.getenv("SECRET_KEY"))
+    app.config["SESSION_COOKIE_SECURE"] = session_cookie_secure_from_env(
+        os.getenv("SESSION_COOKIE_SECURE")
+    )
     app.config["DB_PASSWORD_CONFIGURED"] = password is not None
     app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
         "postgresql+psycopg",
