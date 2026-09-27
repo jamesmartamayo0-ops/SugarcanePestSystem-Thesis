@@ -13,3 +13,7 @@ frontend/.next/
 
 uploads/*
 !uploads/.gitkeep
+
+# Private key protections
+*.pem
+*.key

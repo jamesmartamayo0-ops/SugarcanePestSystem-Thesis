@@ -18,6 +18,7 @@ def health():
         try:
             db.session.execute(text("SELECT 1")).scalar_one()
         except Exception:
+            current_app.logger.exception("Database health check failed")
             pass
         else:
             data["database"] = "connected"
