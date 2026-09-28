@@ -10,3 +10,7 @@ def isolated_app_environment(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", secrets.token_hex(32))
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "false")
     monkeypatch.setenv("DB_PASSWORD", "")
+    monkeypatch.setenv("DB_HOST", "localhost")
+    monkeypatch.setenv("DB_PORT", "99999")
+    monkeypatch.setenv("DB_NAME", "nonexistent_test_database")
+    monkeypatch.setenv("DB_USER", "test_user_only")

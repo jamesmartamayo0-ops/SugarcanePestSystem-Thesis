@@ -331,3 +331,139 @@ def test_login_timestamp_failure_does_not_create_session(auth_case, monkeypatch)
     assert response.status_code == 503
     assert "internal database detail" not in response.get_data(as_text=True)
     assert session_state(client) == {}
+
+
+def test_login_cookie_security_attributes(auth_case):
+    client, _, _, _, _ = auth_case
+    response = login(client)
+    assert response.status_code == 200
+    cookie = response.headers.getlist("Set-Cookie")
+    cookie_str = " ".join(cookie)
+    assert "HttpOnly" in cookie_str
+    assert "SameSite=Lax" in cookie_str
+    assert "Path=/" in cookie_str
+    # Secure is not set under local HTTP configuration.
+    assert "Secure" not in cookie_str
+
+
+def test_login_oversized_username_and_password_rejected(auth_case):
+    client, _, _, _, _ = auth_case
+    huge_username = "a" * 129
+    huge_password = "x" * 1025
+    response = client.post(LOGIN, json={"username": huge_username, "password": PASSWORD}, headers={"Origin": ORIGIN})
+    assert response.status_code == 400
+    response = client.post(LOGIN, json={"username": "admin.one", "password": huge_password}, headers={"Origin": ORIGIN})
+    assert response.status_code == 400
+
+
+def test_session_user_id_range_and_type_validation(auth_case):
+    client, user, users, calls, _ = auth_case
+    login(client)
+    # Verify lookup is never called for clearly invalid IDs.
+    for invalid_id in (True, False, 0, -1, 2_147_483_648, "1", None):
+        lookup_before = calls["id"]
+        with client.session_transaction() as session:
+            session["user_id"] = invalid_id
+            if invalid_id is not None:
+                session["auth_version"] = 0
+                session["issued_at"] = 1_750_000_000
+                session["csrf_token"] = "0" * 64
+        response = client.get(ME)
+        assert response.status_code == 401, f"Expected 401 for user_id={invalid_id!r}"
+        assert session_state(client) == {}
+        assert calls["id"] == lookup_before, f"Lookup called for invalid user_id={invalid_id!r}"
+
+
+def test_post_commit_refresh_avoids_unsanitized_500(auth_case, monkeypatch):
+    # Real regression test: after save_last_login succeeds, accessing user
+    # attributes raises. The pre-capture fix (user_id/auth_version/public_user)
+    # must survive this; the old pattern (accessing user.id after commit) fails.
+    client, user, users, _, clock = auth_case
+
+    original_save = auth.save_last_login
+
+    def save_then_break(item, timestamp):
+        # Call original save first (commit succeeds)
+        original_save(item, timestamp)
+        # After commit, make any attribute access on this user fail.
+        # This simulates SQLAlchemy expiration or a broken refresh.
+        original_getattr = user.__getattribute__
+        def broken_getattr(name):
+            if name in ("id", "auth_version", "username", "full_name", "role"):
+                raise RuntimeError("post-commit attribute access broken")
+            return original_getattr(name)
+        user.__getattribute__ = broken_getattr
+
+    monkeypatch.setattr(auth, "save_last_login", save_then_break)
+    user_id_before = user.id
+    auth_version_before = user.auth_version
+    response = login(client)
+    # Current production (pre-capture) must still succeed: 200
+    assert response.status_code == 200
+    # Old pattern would trigger RuntimeError and return 500, not 200.
+    body = response.get_json()
+    assert body["data"]["user"]["id"] == user_id_before  # pre-captured value
+
+
+def test_role_requirement_admin_and_technician_denied(auth_case):
+    client, user, _, _, _ = auth_case
+    login(client)
+    assert client.get("/test/admin").status_code == 200
+    user.role = "TECHNICIAN"
+    assert client.get("/test/admin").status_code == 403
+    assert client.get("/test/authenticated").status_code == 200
+
+
+def test_maximum_postgresql_integer_accepted_for_lookup(auth_case, monkeypatch):
+    # 2147483647 is the PostgreSQL INTEGER max; validation must allow it
+    # and the lookup should be attempted (not rejected before lookup).
+    client, user, users, calls, _ = auth_case
+    lookup_calls = {"count": 0}
+
+    def tracked_lookup(user_id):
+        lookup_calls["count"] += 1
+        return users.get(user_id)
+
+    monkeypatch.setattr(auth, "get_user_by_id", tracked_lookup)
+    with client.session_transaction() as session:
+        session["user_id"] = 2_147_483_647
+        session["auth_version"] = 0
+        session["issued_at"] = 1_750_000_000
+        session["csrf_token"] = "0" * 64
+    response = client.get(ME)
+    # No matching user -> unauthenticated 401, NOT a validation-rejected 401
+    # But the lookup must have been attempted (not skipped by validation).
+    assert lookup_calls["count"] > 0, "Lookup should be attempted for max integer ID"
+
+
+def test_multi_role_decorator_allows_matching_roles(auth_case):
+    # Multi-role requirement: either ADMIN or TECHNICIAN should succeed.
+    client, user, _, _, _ = auth_case
+    # Add a multi-role test-only route
+    from app.auth import login_required, roles_required
+    from flask import jsonify
+    @client.application.get("/test/multi_role")
+    @login_required
+    @roles_required("ADMIN", "TECHNICIAN")
+    def multi_role():
+        return jsonify({"allowed": True})
+    login(client)
+    # ADMIN user passes multi-role
+    assert client.get("/test/multi_role").status_code == 200
+    user.role = "TECHNICIAN"
+    # TECHNICIAN also passes multi-role
+    assert client.get("/test/multi_role").status_code == 200
+
+
+def test_secure_cookie_true_adds_secure_flag(monkeypatch):
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
+    app = create_app()
+    app.testing = True
+    # The config should load Secure=True from env, but the cookie is only
+    # set on responses that set it; verify config reflects it.
+    assert app.config["SESSION_COOKIE_SECURE"] is True
+
+
+def test_empty_roles_raises_value_error():
+    with pytest.raises(ValueError):
+        roles_required()

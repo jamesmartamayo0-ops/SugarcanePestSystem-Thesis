@@ -62,6 +62,12 @@ def login():
     if not user.check_password(password) or not user.is_active:
         return auth_error(_INVALID_CREDENTIALS, 401)
 
+    # Capture all public/session values before commit; after save_last_login
+    # SQLAlchemy may expire the user and trigger an unsanitized refresh.
+    user_id = user.id
+    auth_version = user.auth_version
+    public_user = _public_user(user)
+
     try:
         auth_service.save_last_login(user, datetime.now(timezone.utc))
     except SQLAlchemyError:
@@ -69,14 +75,14 @@ def login():
         return auth_error("Authentication service unavailable.", 503)
 
     session.clear()
-    session["user_id"] = user.id
-    session["auth_version"] = user.auth_version
+    session["user_id"] = user_id
+    session["auth_version"] = auth_version
     session["issued_at"] = auth_service.now_epoch_seconds()
     session["csrf_token"] = secrets.token_hex(32)
     session.permanent = True
 
     return jsonify({
-        "data": {"user": _public_user(user), "csrf_token": session["csrf_token"]},
+        "data": {"user": public_user, "csrf_token": session["csrf_token"]},
         "message": "Login successful.",
     })
 

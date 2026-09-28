@@ -86,7 +86,7 @@ def load_current_user():
     lifetime = int(current_app.permanent_session_lifetime.total_seconds())
     valid_state = (
         type(user_id) is int
-        and user_id > 0
+        and 0 < user_id <= 2_147_483_647
         and type(auth_version) is int
         and auth_version >= 0
         and type(issued_at) is int
