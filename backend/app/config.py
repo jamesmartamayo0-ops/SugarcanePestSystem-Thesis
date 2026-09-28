@@ -1,6 +1,7 @@
 import os
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from flask import Flask
@@ -15,6 +16,10 @@ class Config:
     SESSION_COOKIE_PATH = "/"
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
     SESSION_REFRESH_EACH_REQUEST = False
+    AUTH_TRUSTED_ORIGINS = (
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    )
     CORS_ORIGINS = (
         "http://localhost:3000",
         "http://127.0.0.1:3000",
@@ -42,11 +47,43 @@ def session_cookie_secure_from_env(value: str | None) -> bool:
     raise ValueError("SESSION_COOKIE_SECURE must be true or false.")
 
 
+def parse_trusted_origins(value: str | None) -> tuple[str, ...]:
+    if value is None:
+        return Config.AUTH_TRUSTED_ORIGINS
+
+    origins = tuple(origin.strip() for origin in value.split(","))
+    if not origins or any(not origin for origin in origins):
+        raise ValueError("AUTH_TRUSTED_ORIGINS must contain valid origins.")
+    for origin in origins:
+        try:
+            parsed = urlsplit(origin)
+            parsed.port  # Access validates an optional numeric port.
+            valid = (
+                parsed.scheme in {"http", "https"}
+                and parsed.hostname is not None
+                and parsed.username is None
+                and parsed.password is None
+                and not parsed.path
+                and not parsed.query
+                and not parsed.fragment
+                and "*" not in origin
+                and origin == f"{parsed.scheme}://{parsed.netloc}"
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise ValueError("AUTH_TRUSTED_ORIGINS must contain valid origins.")
+    return origins
+
+
 def configure_app(app: Flask) -> None:
     load_dotenv(Path(__file__).resolve().parents[1] / ".env", override=False)
 
     password = os.getenv("DB_PASSWORD") or None
     app.config.from_object(Config)
+    app.config["AUTH_TRUSTED_ORIGINS"] = parse_trusted_origins(
+        os.getenv("AUTH_TRUSTED_ORIGINS")
+    )
     app.config["SECRET_KEY"] = validate_secret_key(os.getenv("SECRET_KEY"))
     app.config["SESSION_COOKIE_SECURE"] = session_cookie_secure_from_env(
         os.getenv("SESSION_COOKIE_SECURE")
