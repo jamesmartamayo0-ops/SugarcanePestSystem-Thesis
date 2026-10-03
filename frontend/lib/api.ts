@@ -9,10 +9,6 @@ export type HealthResponse = {
   message: string;
 };
 
-const apiBaseUrl =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.trim() ||
-  "http://127.0.0.1:5000/api/v1";
-
 function isHealthResponse(value: unknown): value is HealthResponse {
   if (typeof value !== "object" || value === null || !("data" in value)) {
     return false;
@@ -34,7 +30,7 @@ function isHealthResponse(value: unknown): value is HealthResponse {
 }
 
 export async function fetchHealth(signal?: AbortSignal): Promise<HealthResponse> {
-  const response = await fetch(`${apiBaseUrl.replace(/\/+$/, "")}/health`, {
+  const response = await fetch("/api/v1/health", {
     cache: "no-store",
     credentials: "omit",
     signal,
