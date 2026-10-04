@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
 import { getCurrentUser, type AuthSession, type AuthUser } from "@/lib/auth";
+import { advanceAuthSessionVersion, getAuthSessionVersion, onSessionExpired } from "@/lib/api";
 
 type AuthState =
   | { status: "loading"; user: null; csrfToken: null }
@@ -26,10 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
+    const requestVersion = getAuthSessionVersion();
+    const unsubscribe = onSessionExpired(() => {
+      setState({ status: "unauthenticated", user: null, csrfToken: null });
+    });
 
     getCurrentUser(controller.signal)
       .then((session) => {
-        if (active) {
+        if (active && requestVersion === getAuthSessionVersion()) {
           setState(
             session
               ? { status: "authenticated", user: session.user, csrfToken: session.csrfToken }
@@ -38,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {
-        if (active) {
+        if (active && requestVersion === getAuthSessionVersion()) {
           setState({ status: "error", user: null, csrfToken: null });
         }
       });
@@ -46,10 +51,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       active = false;
       controller.abort();
+      unsubscribe();
     };
   }, []);
 
   function setSession(session: AuthSession | null) {
+    advanceAuthSessionVersion();
     setState(
       session
         ? { status: "authenticated", user: session.user, csrfToken: session.csrfToken }

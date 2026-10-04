@@ -1,5 +1,36 @@
 export type ConnectionStatus = "connected" | "unavailable";
 
+let authSessionVersion = 0;
+const sessionExpiredListeners = new Set<() => void>();
+
+export function getAuthSessionVersion(): number {
+  return authSessionVersion;
+}
+
+export function advanceAuthSessionVersion(): void {
+  authSessionVersion += 1;
+}
+
+export function onSessionExpired(listener: () => void): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => sessionExpiredListeners.delete(listener);
+}
+
+export async function authenticatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const requestVersion = authSessionVersion;
+  const response = await fetch(path, {
+    ...init,
+    credentials: "include",
+  });
+
+  if (response.status === 401 && requestVersion === authSessionVersion) {
+    advanceAuthSessionVersion();
+    sessionExpiredListeners.forEach((listener) => listener());
+  }
+
+  return response;
+}
+
 export type HealthResponse = {
   data: {
     service: "sugarcane-pest-api";
