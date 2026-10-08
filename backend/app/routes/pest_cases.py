@@ -8,11 +8,15 @@ from app.auth import auth_error, login_required, roles_required
 from app.extensions import db
 from app.models import (
     Farm,
+    Inspection,
     PestCase,
     PestCaseStatus,
+    User,
+    UserRole,
     normalize_observed_on,
     normalize_pest_name,
     normalize_reported_area,
+    normalize_scheduled_for,
     normalize_symptoms,
 )
 
@@ -108,6 +112,10 @@ def get_pest_case_for_update(case_id: int):
 
 def get_farm_by_id(farm_id: int):
     return db.session.get(Farm, farm_id)
+
+
+def get_user_by_id(user_id: int):
+    return db.session.get(User, user_id)
 
 
 def acquire_pest_case_transition_lock(case_id: int) -> None:
@@ -433,3 +441,122 @@ def submit_for_inspection(case_id: int):
     return jsonify(
         {"data": {"pest_case": detail}, "message": "Pest case submitted for inspection."}
     )
+
+
+_SCHEDULE_INSPECTION_FIELDS = frozenset({"scheduled_for", "assigned_to_user_id"})
+
+
+def get_inspection_by_case_id(case_id: int):
+    return db.session.scalar(
+        select(Inspection).where(Inspection.pest_case_id == case_id).limit(1)
+    )
+
+
+@pest_cases_bp.post("/<int:case_id>/schedule-inspection")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def schedule_inspection(case_id: int):
+    if not request.is_json or (
+        request.content_length is not None and request.content_length > 4096
+    ):
+        return auth_error("Invalid inspection data.", 400)
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or set(payload) != _SCHEDULE_INSPECTION_FIELDS:
+        return auth_error("Invalid inspection data.", 400)
+    raw_date = payload.get("scheduled_for")
+    raw_assignee = payload.get("assigned_to_user_id")
+    if not isinstance(raw_date, str) or not raw_date.strip() or len(raw_date) > 32:
+        return auth_error("Invalid inspection data.", 400)
+    if type(raw_assignee) is not int or not 0 < raw_assignee <= 2_147_483_647:
+        return auth_error("Invalid inspection data.", 400)
+
+    try:
+        scheduled_for = normalize_scheduled_for(raw_date)
+    except ValueError as exc:
+        return auth_error(str(exc), 400)
+
+    try:
+        # Same lock order as all inspection operations: advisory lock first,
+        # then SELECT ... FOR UPDATE with populate_existing, then recheck.
+        acquire_pest_case_transition_lock(case_id)
+        case = get_pest_case_for_update(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Inspection scheduling lookup failed.")
+        return auth_error("Inspection service unavailable.", 503)
+    if case is None:
+        db.session.rollback()
+        return auth_error("Pest case not found.", 404)
+
+    try:
+        existing = get_inspection_by_case_id(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Inspection duplicate check failed.")
+        return auth_error("Inspection service unavailable.", 503)
+    if existing is not None:
+        db.session.rollback()
+        return auth_error("Inspection has already been scheduled for this case.", 409)
+
+    if case.status != PestCaseStatus.FOR_INSPECTION.value:
+        db.session.rollback()
+        return auth_error("Pest case cannot be scheduled for inspection.", 409)
+
+    try:
+        technician = get_user_by_id(raw_assignee)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Inspection technician lookup failed.")
+        return auth_error("Inspection service unavailable.", 503)
+    if technician is None:
+        db.session.rollback()
+        return auth_error("Technician not found.", 404)
+    if technician.role != UserRole.TECHNICIAN.value or not bool(technician.is_active):
+        db.session.rollback()
+        return auth_error("Invalid technician assignment.", 400)
+
+    try:
+        inspection = Inspection(
+            pest_case_id=case.id,
+            scheduled_for=scheduled_for,
+            assigned_to_user_id=technician.id,
+            scheduled_by_user_id=g.current_user.id,
+        )
+        db.session.add(inspection)
+        case.status = PestCaseStatus.INSPECTION_SCHEDULED.value
+        db.session.flush()
+        inspection.assignee = technician
+        inspection.scheduler = g.current_user
+        inspection.pest_case = case
+        detail = {
+            "id": inspection.id,
+            "pest_case_id": inspection.pest_case_id,
+            "scheduled_for": inspection.scheduled_for.isoformat(),
+            "assigned_to_user_id": inspection.assigned_to_user_id,
+            "assigned_to": {
+                "id": technician.id,
+                "username": technician.username,
+                "full_name": technician.full_name,
+            },
+            "scheduled_by_user_id": g.current_user.id,
+            "inspected_on": None,
+            "findings": None,
+            "pest_confirmed": None,
+            "validated_area_hectares": None,
+            "completed_by_user_id": None,
+            "completed_at": None,
+            "pest_case": _pest_case_detail(case),
+        }
+        commit_pest_case_changes()
+    except IntegrityError:
+        db.session.rollback()
+        current_app.logger.error("Inspection scheduling integrity failure.")
+        return auth_error("Inspection has already been scheduled for this case.", 409)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Inspection scheduling failed.")
+        return auth_error("Inspection service unavailable.", 503)
+
+    response = jsonify({"data": {"inspection": detail}, "message": "Inspection scheduled."})
+    response.status_code = 201
+    return response

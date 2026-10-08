@@ -510,7 +510,13 @@ def test_model_normalization_helpers():
 
 def test_model_relationship_and_constraints():
     assert PestCase.__table__.name == "pest_cases"
-    assert {status.value for status in PestCaseStatus} == {"REPORTED", "FOR_INSPECTION"}
+    assert {status.value for status in PestCaseStatus} == {
+        "REPORTED",
+        "FOR_INSPECTION",
+        "INSPECTION_SCHEDULED",
+        "NOT_CONFIRMED",
+        "FIELD_VALIDATED",
+    }
     names = {constraint.name for constraint in PestCase.__table__.constraints}
     assert {
         "ck_pest_cases_area_positive",

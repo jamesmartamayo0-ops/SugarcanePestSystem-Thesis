@@ -24,6 +24,9 @@ from app.models.farm import MAX_AREA_HECTARES, normalize_area_hectares
 class PestCaseStatus(StrEnum):
     REPORTED = "REPORTED"
     FOR_INSPECTION = "FOR_INSPECTION"
+    INSPECTION_SCHEDULED = "INSPECTION_SCHEDULED"
+    NOT_CONFIRMED = "NOT_CONFIRMED"
+    FIELD_VALIDATED = "FIELD_VALIDATED"
 
 
 _ALLOWED_STATUSES = frozenset({status.value for status in PestCaseStatus})
@@ -92,7 +95,9 @@ class PestCase(db.Model):
             "reported_area_hectares <= 10000", name="ck_pest_cases_area_max"
         ),
         CheckConstraint(
-            "status IN ('REPORTED', 'FOR_INSPECTION')", name="ck_pest_cases_status"
+            "status IN ('REPORTED', 'FOR_INSPECTION', 'INSPECTION_SCHEDULED', "
+            "'NOT_CONFIRMED', 'FIELD_VALIDATED')",
+            name="ck_pest_cases_status",
         ),
     )
 

@@ -1,6 +1,11 @@
 import { authenticatedFetch } from "@/lib/api";
 
-export type PestCaseStatus = "REPORTED" | "FOR_INSPECTION";
+export type PestCaseStatus =
+  | "REPORTED"
+  | "FOR_INSPECTION"
+  | "INSPECTION_SCHEDULED"
+  | "NOT_CONFIRMED"
+  | "FIELD_VALIDATED";
 
 export type PestCaseSummary = {
   id: number;
@@ -89,7 +94,11 @@ function parseSummary(value: unknown): PestCaseSummary {
     typeof entry.pest_name !== "string" ||
     typeof entry.reported_area_hectares !== "number" ||
     !Number.isFinite(entry.reported_area_hectares) ||
-    (entry.status !== "REPORTED" && entry.status !== "FOR_INSPECTION") ||
+    (entry.status !== "REPORTED" &&
+      entry.status !== "FOR_INSPECTION" &&
+      entry.status !== "INSPECTION_SCHEDULED" &&
+      entry.status !== "NOT_CONFIRMED" &&
+      entry.status !== "FIELD_VALIDATED") ||
     (entry.observed_on !== null && typeof entry.observed_on !== "string") ||
     (entry.reported_at !== null && typeof entry.reported_at !== "string")
   ) {

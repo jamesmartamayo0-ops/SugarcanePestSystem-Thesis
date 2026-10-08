@@ -101,6 +101,12 @@ export default function DashboardPage() {
           >
             Pest Case Reporting
           </Link>
+          <Link
+            href="/inspections"
+            className="inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            Inspection Scheduling
+          </Link>
           {auth.user.role === "ADMIN" && (
             <Link
               href="/admin"

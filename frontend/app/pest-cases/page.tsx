@@ -37,6 +37,15 @@ function parseArea(raw: string): number | null {
 }
 
 function statusBadge(status: PestCaseStatus): string {
+  if (status === "FIELD_VALIDATED") {
+    return "bg-emerald-100 text-emerald-800";
+  }
+  if (status === "NOT_CONFIRMED") {
+    return "bg-slate-200 text-slate-700";
+  }
+  if (status === "INSPECTION_SCHEDULED") {
+    return "bg-violet-100 text-violet-800";
+  }
   return status === "REPORTED"
     ? "bg-amber-100 text-amber-800"
     : "bg-sky-100 text-sky-800";
@@ -410,6 +419,12 @@ function PestCasesPageInner() {
           >
             View farms
           </Link>
+          <Link
+            href="/inspections"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View inspections
+          </Link>
         </div>
 
         <section aria-label="Report pest case" className="mt-8">
@@ -544,6 +559,9 @@ function PestCasesPageInner() {
                 <option value="all">All statuses</option>
                 <option value="REPORTED">REPORTED</option>
                 <option value="FOR_INSPECTION">FOR_INSPECTION</option>
+                <option value="INSPECTION_SCHEDULED">INSPECTION_SCHEDULED</option>
+                <option value="NOT_CONFIRMED">NOT_CONFIRMED</option>
+                <option value="FIELD_VALIDATED">FIELD_VALIDATED</option>
               </select>
               <label htmlFor="farm_filter" className="text-sm font-medium text-slate-700">
                 Farm
