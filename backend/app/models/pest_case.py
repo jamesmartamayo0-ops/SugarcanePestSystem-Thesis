@@ -27,6 +27,8 @@ class PestCaseStatus(StrEnum):
     INSPECTION_SCHEDULED = "INSPECTION_SCHEDULED"
     NOT_CONFIRMED = "NOT_CONFIRMED"
     FIELD_VALIDATED = "FIELD_VALIDATED"
+    UNDER_INTERVENTION = "UNDER_INTERVENTION"
+    FOLLOW_UP_DUE = "FOLLOW_UP_DUE"
 
 
 _ALLOWED_STATUSES = frozenset({status.value for status in PestCaseStatus})
@@ -96,7 +98,8 @@ class PestCase(db.Model):
         ),
         CheckConstraint(
             "status IN ('REPORTED', 'FOR_INSPECTION', 'INSPECTION_SCHEDULED', "
-            "'NOT_CONFIRMED', 'FIELD_VALIDATED')",
+            "'NOT_CONFIRMED', 'FIELD_VALIDATED', 'UNDER_INTERVENTION', "
+            "'FOLLOW_UP_DUE')",
             name="ck_pest_cases_status",
         ),
     )

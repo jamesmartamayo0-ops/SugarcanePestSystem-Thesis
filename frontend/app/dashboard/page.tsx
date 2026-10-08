@@ -107,6 +107,12 @@ export default function DashboardPage() {
           >
             Inspection Scheduling
           </Link>
+          <Link
+            href="/interventions"
+            className="inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            Intervention Management
+          </Link>
           {auth.user.role === "ADMIN" && (
             <Link
               href="/admin"

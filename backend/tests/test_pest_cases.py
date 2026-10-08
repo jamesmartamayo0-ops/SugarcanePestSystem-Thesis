@@ -516,6 +516,8 @@ def test_model_relationship_and_constraints():
         "INSPECTION_SCHEDULED",
         "NOT_CONFIRMED",
         "FIELD_VALIDATED",
+        "UNDER_INTERVENTION",
+        "FOLLOW_UP_DUE",
     }
     names = {constraint.name for constraint in PestCase.__table__.constraints}
     assert {

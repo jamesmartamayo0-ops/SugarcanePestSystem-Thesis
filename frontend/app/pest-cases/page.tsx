@@ -40,6 +40,12 @@ function statusBadge(status: PestCaseStatus): string {
   if (status === "FIELD_VALIDATED") {
     return "bg-emerald-100 text-emerald-800";
   }
+  if (status === "FOLLOW_UP_DUE") {
+    return "bg-teal-100 text-teal-800";
+  }
+  if (status === "UNDER_INTERVENTION") {
+    return "bg-violet-100 text-violet-800";
+  }
   if (status === "NOT_CONFIRMED") {
     return "bg-slate-200 text-slate-700";
   }
@@ -425,6 +431,12 @@ function PestCasesPageInner() {
           >
             View inspections
           </Link>
+          <Link
+            href="/interventions"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View interventions
+          </Link>
         </div>
 
         <section aria-label="Report pest case" className="mt-8">
@@ -562,6 +574,8 @@ function PestCasesPageInner() {
                 <option value="INSPECTION_SCHEDULED">INSPECTION_SCHEDULED</option>
                 <option value="NOT_CONFIRMED">NOT_CONFIRMED</option>
                 <option value="FIELD_VALIDATED">FIELD_VALIDATED</option>
+                <option value="UNDER_INTERVENTION">UNDER_INTERVENTION</option>
+                <option value="FOLLOW_UP_DUE">FOLLOW_UP_DUE</option>
               </select>
               <label htmlFor="farm_filter" className="text-sm font-medium text-slate-700">
                 Farm
@@ -794,6 +808,27 @@ function PestCasesPageInner() {
                       </p>
                     )}
                   </div>
+                ) : detail.status === "FIELD_VALIDATED" ? (
+                  <p role="status" className="mt-6 text-sm text-slate-600">
+                    This case is validated and ready for an intervention plan.{" "}
+                    <Link
+                      href="/interventions"
+                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                    >
+                      Go to interventions
+                    </Link>
+                  </p>
+                ) : detail.status === "UNDER_INTERVENTION" ||
+                  detail.status === "FOLLOW_UP_DUE" ? (
+                  <p role="status" className="mt-6 text-sm text-slate-600">
+                    This case has an intervention record.{" "}
+                    <Link
+                      href="/interventions"
+                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                    >
+                      Go to interventions
+                    </Link>
+                  </p>
                 ) : (
                   <p role="status" className="mt-6 text-sm text-slate-600">
                     This case is queued for inspection and can no longer be edited here.

@@ -5,7 +5,9 @@ export type PestCaseStatus =
   | "FOR_INSPECTION"
   | "INSPECTION_SCHEDULED"
   | "NOT_CONFIRMED"
-  | "FIELD_VALIDATED";
+  | "FIELD_VALIDATED"
+  | "UNDER_INTERVENTION"
+  | "FOLLOW_UP_DUE";
 
 export type PestCaseSummary = {
   id: number;
@@ -98,7 +100,9 @@ function parseSummary(value: unknown): PestCaseSummary {
       entry.status !== "FOR_INSPECTION" &&
       entry.status !== "INSPECTION_SCHEDULED" &&
       entry.status !== "NOT_CONFIRMED" &&
-      entry.status !== "FIELD_VALIDATED") ||
+      entry.status !== "FIELD_VALIDATED" &&
+      entry.status !== "UNDER_INTERVENTION" &&
+      entry.status !== "FOLLOW_UP_DUE") ||
     (entry.observed_on !== null && typeof entry.observed_on !== "string") ||
     (entry.reported_at !== null && typeof entry.reported_at !== "string")
   ) {

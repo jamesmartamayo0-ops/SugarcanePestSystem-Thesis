@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models import (
     Farm,
     Inspection,
+    Intervention,
     PestCase,
     PestCaseStatus,
     User,
@@ -18,6 +19,14 @@ from app.models import (
     normalize_reported_area,
     normalize_scheduled_for,
     normalize_symptoms,
+)
+from app.models.intervention import (
+    normalize_follow_up_due_on,
+    normalize_method_category,
+    normalize_method_description,
+)
+from app.models.intervention import (
+    normalize_scheduled_for as normalize_intervention_scheduled_for,
 )
 
 pest_cases_bp = Blueprint("pest_cases", __name__, url_prefix="/api/v1/pest-cases")
@@ -558,5 +567,172 @@ def schedule_inspection(case_id: int):
         return auth_error("Inspection service unavailable.", 503)
 
     response = jsonify({"data": {"inspection": detail}, "message": "Inspection scheduled."})
+    response.status_code = 201
+    return response
+
+
+_START_INTERVENTION_REQUIRED = frozenset(
+    {"method_category", "method_description", "scheduled_for", "assigned_to_user_id"}
+)
+_START_INTERVENTION_ALLOWED = frozenset(
+    {
+        "method_category",
+        "method_description",
+        "scheduled_for",
+        "assigned_to_user_id",
+        "follow_up_due_on",
+    }
+)
+
+
+def get_pending_intervention_by_case_id(case_id: int):
+    return db.session.scalar(
+        select(Intervention)
+        .where(
+            Intervention.pest_case_id == case_id,
+            Intervention.completed_at.is_(None),
+        )
+        .limit(1)
+    )
+
+
+@pest_cases_bp.post("/<int:case_id>/start-intervention")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def start_intervention(case_id: int):
+    if not request.is_json or (
+        request.content_length is not None and request.content_length > 4096
+    ):
+        return auth_error("Invalid intervention data.", 400)
+    payload = request.get_json(silent=True)
+    if (
+        not isinstance(payload, dict)
+        or not _START_INTERVENTION_REQUIRED.issubset(set(payload))
+        or not set(payload).issubset(_START_INTERVENTION_ALLOWED)
+    ):
+        return auth_error("Invalid intervention data.", 400)
+    raw_category = payload.get("method_category")
+    raw_description = payload.get("method_description")
+    raw_date = payload.get("scheduled_for")
+    raw_assignee = payload.get("assigned_to_user_id")
+    raw_follow_up = payload.get("follow_up_due_on")
+    if not isinstance(raw_category, str) or not raw_category.strip() or len(raw_category) > 32:
+        return auth_error("Invalid intervention data.", 400)
+    if not isinstance(raw_description, str) or not raw_description.strip() or len(raw_description) > 5000:
+        return auth_error("Invalid intervention data.", 400)
+    if not isinstance(raw_date, str) or not raw_date.strip() or len(raw_date) > 32:
+        return auth_error("Invalid intervention data.", 400)
+    if type(raw_assignee) is not int or not 0 < raw_assignee <= 2_147_483_647:
+        return auth_error("Invalid intervention data.", 400)
+    if raw_follow_up is not None and (
+        not isinstance(raw_follow_up, str) or not raw_follow_up.strip() or len(raw_follow_up) > 32
+    ):
+        return auth_error("Invalid intervention data.", 400)
+
+    try:
+        method_category = normalize_method_category(raw_category)
+        method_description = normalize_method_description(raw_description)
+        scheduled_for = normalize_intervention_scheduled_for(raw_date)
+        follow_up_due_on = (
+            normalize_follow_up_due_on(raw_follow_up) if raw_follow_up is not None else None
+        )
+    except ValueError as exc:
+        return auth_error(str(exc), 400)
+
+    try:
+        # Same lock order as all Phase 3B/3C/3D operations: advisory lock
+        # first, then SELECT ... FOR UPDATE with populate_existing, then recheck.
+        acquire_pest_case_transition_lock(case_id)
+        case = get_pest_case_for_update(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Intervention start lookup failed.")
+        return auth_error("Intervention service unavailable.", 503)
+    if case is None:
+        db.session.rollback()
+        return auth_error("Pest case not found.", 404)
+
+    try:
+        existing = get_pending_intervention_by_case_id(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Intervention duplicate check failed.")
+        return auth_error("Intervention service unavailable.", 503)
+    if existing is not None:
+        db.session.rollback()
+        return auth_error("Intervention has already been started for this case.", 409)
+
+    if case.status != PestCaseStatus.FIELD_VALIDATED.value:
+        db.session.rollback()
+        return auth_error("Intervention cannot be started for this case.", 409)
+
+    try:
+        technician = get_user_by_id(raw_assignee)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Intervention technician lookup failed.")
+        return auth_error("Intervention service unavailable.", 503)
+    if technician is None:
+        db.session.rollback()
+        return auth_error("Technician not found.", 404)
+    if technician.role != UserRole.TECHNICIAN.value or not bool(technician.is_active):
+        db.session.rollback()
+        return auth_error("Invalid technician assignment.", 400)
+
+    try:
+        intervention = Intervention(
+            pest_case_id=case.id,
+            method_category=method_category,
+            method_description=method_description,
+            scheduled_for=scheduled_for,
+            assigned_to_user_id=technician.id,
+            created_by_user_id=g.current_user.id,
+            follow_up_due_on=follow_up_due_on,
+        )
+        db.session.add(intervention)
+        case.status = PestCaseStatus.UNDER_INTERVENTION.value
+        db.session.flush()
+        intervention.assignee = technician
+        intervention.creator = g.current_user
+        intervention.pest_case = case
+        detail = {
+            "id": intervention.id,
+            "pest_case_id": intervention.pest_case_id,
+            "method_category": intervention.method_category,
+            "method_description": intervention.method_description,
+            "scheduled_for": intervention.scheduled_for.isoformat(),
+            "assigned_to_user_id": intervention.assigned_to_user_id,
+            "assigned_to": {
+                "id": technician.id,
+                "username": technician.username,
+                "full_name": technician.full_name,
+            },
+            "created_by_user_id": g.current_user.id,
+            "performed_on": None,
+            "completion_notes": None,
+            "follow_up_due_on": intervention.follow_up_due_on.isoformat()
+            if intervention.follow_up_due_on is not None
+            else None,
+            "completed_by_user_id": None,
+            "completed_at": None,
+            "created_at": intervention.created_at.isoformat()
+            if intervention.created_at is not None
+            else None,
+            "updated_at": intervention.updated_at.isoformat()
+            if intervention.updated_at is not None
+            else None,
+            "pest_case": _pest_case_detail(case),
+        }
+        commit_pest_case_changes()
+    except IntegrityError:
+        db.session.rollback()
+        current_app.logger.error("Intervention start integrity failure.")
+        return auth_error("Intervention has already been started for this case.", 409)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Intervention start failed.")
+        return auth_error("Intervention service unavailable.", 503)
+
+    response = jsonify({"data": {"intervention": detail}, "message": "Intervention started."})
     response.status_code = 201
     return response
