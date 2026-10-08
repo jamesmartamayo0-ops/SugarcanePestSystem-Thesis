@@ -95,6 +95,12 @@ export default function DashboardPage() {
           >
             Farm Management
           </Link>
+          <Link
+            href="/pest-cases"
+            className="inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            Pest Case Reporting
+          </Link>
           {auth.user.role === "ADMIN" && (
             <Link
               href="/admin"

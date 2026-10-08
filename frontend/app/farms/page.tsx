@@ -292,6 +292,12 @@ export default function FarmsPage() {
           >
             View farmers
           </Link>
+          <Link
+            href="/pest-cases"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            Report pest case
+          </Link>
         </div>
 
         <section aria-label="Add farm" className="mt-8">
@@ -460,16 +466,24 @@ export default function FarmsPage() {
                       <td className="px-4 py-3 text-slate-900">{entry.area_hectares.toFixed(2)}</td>
                       <td className="px-4 py-3 text-slate-900">{entry.farmer.full_name}</td>
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingId(editingId === entry.id ? null : entry.id);
-                            setEditError(null);
-                          }}
-                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          {editingId === entry.id ? "Cancel" : "Edit"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingId(editingId === entry.id ? null : entry.id);
+                              setEditError(null);
+                            }}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            {editingId === entry.id ? "Cancel" : "Edit"}
+                          </button>
+                          <Link
+                            href={`/pest-cases?farm_id=${entry.id}`}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            Report case
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}
