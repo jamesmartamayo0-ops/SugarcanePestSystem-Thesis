@@ -5,9 +5,11 @@ from app.auth import enforce_unsafe_request, load_current_user, no_store_auth_re
 from app.cli import register_cli
 from app.config import configure_app
 from app.extensions import db, migrate
-from app.models import User  # Register model metadata before Flask-Migrate initializes.
+from app.models import Farm, Farmer, User  # Register model metadata before Flask-Migrate initializes.
 from app.routes.admin import admin_bp
 from app.routes.auth import auth_bp
+from app.routes.farmers import farmers_bp
+from app.routes.farms import farms_bp
 from app.routes.health import health_bp
 
 
@@ -30,5 +32,7 @@ def create_app() -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(farmers_bp)
+    app.register_blueprint(farms_bp)
     register_cli(app)
     return app

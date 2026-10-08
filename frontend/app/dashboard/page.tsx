@@ -80,16 +80,30 @@ export default function DashboardPage() {
         </p>
         <h1 className="mt-4 text-3xl font-semibold text-slate-900">Dashboard</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Authentication is active. Workflow features will be added later.
+          Manage farmer and farm records for pest inspection workflows.
         </p>
-        {auth.user.role === "ADMIN" && (
+        <div className="mt-4 flex flex-wrap gap-3">
           <Link
-            href="/admin"
-            className="mt-4 inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+            href="/farmers"
+            className="inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
           >
-            Admin Management
+            Farmer Management
           </Link>
-        )}
+          <Link
+            href="/farms"
+            className="inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            Farm Management
+          </Link>
+          {auth.user.role === "ADMIN" && (
+            <Link
+              href="/admin"
+              className="inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+            >
+              Admin Management
+            </Link>
+          )}
+        </div>
 
         <dl className="mt-8 divide-y divide-slate-200 border-y border-slate-200">
           <div className="flex justify-between gap-4 py-3">
