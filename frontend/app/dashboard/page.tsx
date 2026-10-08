@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -81,6 +82,14 @@ export default function DashboardPage() {
         <p className="mt-2 text-sm text-slate-600">
           Authentication is active. Workflow features will be added later.
         </p>
+        {auth.user.role === "ADMIN" && (
+          <Link
+            href="/admin"
+            className="mt-4 inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            Admin Management
+          </Link>
+        )}
 
         <dl className="mt-8 divide-y divide-slate-200 border-y border-slate-200">
           <div className="flex justify-between gap-4 py-3">
