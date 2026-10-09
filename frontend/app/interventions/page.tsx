@@ -81,10 +81,24 @@ function statusBadge(status: string): string {
   if (status === "FIELD_VALIDATED") {
     return "bg-teal-100 text-teal-800";
   }
+  if (status === "REINTERVENTION_REQUIRED") {
+    return "bg-orange-100 text-orange-800";
+  }
+  if (status === "CLOSED") {
+    return "bg-slate-800 text-white";
+  }
   if (status === "NOT_CONFIRMED") {
     return "bg-slate-200 text-slate-700";
   }
   return "bg-amber-100 text-amber-800";
+}
+
+function cycleFor(all: InterventionDetail[], item: InterventionDetail): number {
+  const sameCase = all
+    .filter((entry) => entry.pest_case_id === item.pest_case_id)
+    .sort((left, right) => left.id - right.id);
+  const position = sameCase.findIndex((entry) => entry.id === item.id);
+  return position < 0 ? 1 : position + 1;
 }
 
 function isPending(item: InterventionDetail): boolean {
@@ -132,14 +146,19 @@ export default function InterventionsPage() {
       setLoading(true);
       setListError(null);
       try {
-        const [loadedInterventions, loadedCases, loadedTechnicians] = await Promise.all([
-          listInterventions({
-            pestCaseId: caseId === "all" ? undefined : Number(caseId),
-            assignedToUserId: technicianId === "all" ? undefined : Number(technicianId),
-          }),
-          listPestCases({ status: "FIELD_VALIDATED" }),
-          listTechnicians(),
-        ]);
+        const [loadedInterventions, loadedValidated, loadedReintervention, loadedTechnicians] =
+          await Promise.all([
+            listInterventions({
+              pestCaseId: caseId === "all" ? undefined : Number(caseId),
+              assignedToUserId: technicianId === "all" ? undefined : Number(technicianId),
+            }),
+            listPestCases({ status: "FIELD_VALIDATED" }),
+            listPestCases({ status: "REINTERVENTION_REQUIRED" }),
+            listTechnicians(),
+          ]);
+        const loadedCases = [...loadedValidated, ...loadedReintervention].sort(
+          (left, right) => left.id - right.id,
+        );
         setInterventions(loadedInterventions);
         setEligibleCases(loadedCases);
         setTechnicians(loadedTechnicians);
@@ -173,14 +192,19 @@ export default function InterventionsPage() {
     (async () => {
       setLoading(true);
       try {
-        const [loadedInterventions, loadedCases, loadedTechnicians] = await Promise.all([
-          listInterventions(),
-          listPestCases({ status: "FIELD_VALIDATED" }),
-          listTechnicians(),
-        ]);
+        const [loadedInterventions, loadedValidated, loadedReintervention, loadedTechnicians] =
+          await Promise.all([
+            listInterventions(),
+            listPestCases({ status: "FIELD_VALIDATED" }),
+            listPestCases({ status: "REINTERVENTION_REQUIRED" }),
+            listTechnicians(),
+          ]);
         if (!active) {
           return;
         }
+        const loadedCases = [...loadedValidated, ...loadedReintervention].sort(
+          (left, right) => left.id - right.id,
+        );
         setInterventions(loadedInterventions);
         setEligibleCases(loadedCases);
         setTechnicians(loadedTechnicians);
@@ -505,9 +529,11 @@ export default function InterventionsPage() {
           Intervention Management
         </h1>
         <p className="mt-2 text-sm text-slate-600">
-          Plan human-selected field actions for FIELD_VALIDATED cases, then record
-          completion with a follow-up due date. Categories are documentation labels
-          only and never prescribe chemicals, rates, or dosages.
+          Plan human-selected field actions for FIELD_VALIDATED and
+          REINTERVENTION_REQUIRED cases, then record completion with a follow-up
+          due date. Historical interventions are preserved so first and repeat
+          cycles stay distinguishable. Categories are documentation labels only
+          and never prescribe chemicals, rates, or dosages.
         </p>
         <div className="mt-4 flex flex-wrap gap-4">
           <Link
@@ -528,13 +554,20 @@ export default function InterventionsPage() {
           >
             View inspections
           </Link>
+          <Link
+            href="/follow-ups"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View follow-ups
+          </Link>
         </div>
 
         <section aria-label="Start intervention" className="mt-8">
           <h2 className="text-lg font-semibold text-slate-900">Start intervention</h2>
           {eligibleCases.length === 0 && !loading ? (
             <p role="status" className="mt-4 text-sm text-slate-600">
-              No FIELD_VALIDATED cases are waiting for an intervention plan.
+              No FIELD_VALIDATED or REINTERVENTION_REQUIRED cases are waiting for an
+              intervention plan.
             </p>
           ) : (
             <form onSubmit={handleStart} className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -553,7 +586,8 @@ export default function InterventionsPage() {
                   </option>
                   {eligibleCases.map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      #{entry.id} — {entry.pest_name} ({entry.reported_area_hectares.toFixed(2)} ha)
+                      #{entry.id} — {entry.pest_name} ({entry.reported_area_hectares.toFixed(2)} ha) —{" "}
+                      {entry.status}
                     </option>
                   ))}
                 </select>
@@ -734,10 +768,11 @@ export default function InterventionsPage() {
                 <tbody className="divide-y divide-slate-200">
                   {interventions.map((entry) => {
                     const completed = !isPending(entry);
+                    const cycle = cycleFor(interventions, entry);
                     return (
                       <tr key={entry.id}>
                         <td className="px-4 py-3 text-slate-900">
-                          #{entry.id} — {entry.method_category}
+                          #{entry.id} — {entry.method_category} (cycle {cycle})
                           <span className="block text-xs text-slate-600">
                             Scheduled {entry.scheduled_for}
                           </span>
@@ -801,7 +836,8 @@ export default function InterventionsPage() {
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-lg font-semibold text-slate-900">
-                    Intervention #{detail.id} — {detail.pest_case.pest_name}
+                    Intervention #{detail.id} — {detail.pest_case.pest_name} (cycle{" "}
+                    {cycleFor(interventions, detail)})
                   </h2>
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(detail.pest_case.status)}`}
@@ -1065,7 +1101,13 @@ export default function InterventionsPage() {
                 ) : (
                   <p role="status" className="mt-6 text-sm text-slate-600">
                     This intervention is complete and read-only. Follow-up is pending
-                    for {detail.follow_up_due_on ?? "an unset date"}.
+                    for {detail.follow_up_due_on ?? "an unset date"}.{" "}
+                    <Link
+                      href="/follow-ups"
+                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                    >
+                      Go to follow-ups
+                    </Link>
                   </p>
                 )}
                 {actionError && (

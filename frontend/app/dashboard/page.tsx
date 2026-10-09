@@ -113,6 +113,12 @@ export default function DashboardPage() {
           >
             Intervention Management
           </Link>
+          <Link
+            href="/follow-ups"
+            className="inline-flex rounded-lg border border-emerald-700 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+          >
+            Follow-up &amp; Reassessment
+          </Link>
           {auth.user.role === "ADMIN" && (
             <Link
               href="/admin"

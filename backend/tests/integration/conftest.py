@@ -13,8 +13,8 @@ from app.models import User, UserRole
 
 EXPECTED_DATABASE = "sugarcane_pest_test"
 EXPECTED_USER = "sugarcane_app"
-EXPECTED_TABLES = {"alembic_version", "users", "farmers", "farms", "pest_cases", "inspections", "interventions"}
-EXPECTED_REVISION = "e8f2a4c6d1b3"
+EXPECTED_TABLES = {"alembic_version", "users", "farmers", "farms", "pest_cases", "inspections", "interventions", "follow_ups"}
+EXPECTED_REVISION = "c9d4e6a8b2f1"
 TEST_PASSWORD = "Integration-Test-Only-Password-123!"
 
 

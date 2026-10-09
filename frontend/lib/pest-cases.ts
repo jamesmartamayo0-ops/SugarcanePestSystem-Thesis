@@ -7,7 +7,9 @@ export type PestCaseStatus =
   | "NOT_CONFIRMED"
   | "FIELD_VALIDATED"
   | "UNDER_INTERVENTION"
-  | "FOLLOW_UP_DUE";
+  | "FOLLOW_UP_DUE"
+  | "REINTERVENTION_REQUIRED"
+  | "CLOSED";
 
 export type PestCaseSummary = {
   id: number;
@@ -102,7 +104,9 @@ function parseSummary(value: unknown): PestCaseSummary {
       entry.status !== "NOT_CONFIRMED" &&
       entry.status !== "FIELD_VALIDATED" &&
       entry.status !== "UNDER_INTERVENTION" &&
-      entry.status !== "FOLLOW_UP_DUE") ||
+      entry.status !== "FOLLOW_UP_DUE" &&
+      entry.status !== "REINTERVENTION_REQUIRED" &&
+      entry.status !== "CLOSED") ||
     (entry.observed_on !== null && typeof entry.observed_on !== "string") ||
     (entry.reported_at !== null && typeof entry.reported_at !== "string")
   ) {

@@ -49,6 +49,18 @@ function statusBadge(status: string): string {
   if (status === "FIELD_VALIDATED") {
     return "bg-emerald-100 text-emerald-800";
   }
+  if (status === "FOLLOW_UP_DUE") {
+    return "bg-teal-100 text-teal-800";
+  }
+  if (status === "UNDER_INTERVENTION") {
+    return "bg-violet-100 text-violet-800";
+  }
+  if (status === "REINTERVENTION_REQUIRED") {
+    return "bg-orange-100 text-orange-800";
+  }
+  if (status === "CLOSED") {
+    return "bg-slate-800 text-white";
+  }
   if (status === "NOT_CONFIRMED") {
     return "bg-slate-200 text-slate-700";
   }

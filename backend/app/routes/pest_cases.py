@@ -8,6 +8,7 @@ from app.auth import auth_error, login_required, roles_required
 from app.extensions import db
 from app.models import (
     Farm,
+    FollowUp,
     Inspection,
     Intervention,
     PestCase,
@@ -596,6 +597,24 @@ def get_pending_intervention_by_case_id(case_id: int):
     )
 
 
+def get_latest_completed_intervention_by_case_id(case_id: int):
+    return db.session.scalar(
+        select(Intervention)
+        .where(
+            Intervention.pest_case_id == case_id,
+            Intervention.completed_at.is_not(None),
+        )
+        .order_by(Intervention.id.desc())
+        .limit(1)
+    )
+
+
+def get_follow_up_by_intervention_id(intervention_id: int):
+    return db.session.scalar(
+        select(FollowUp).where(FollowUp.intervention_id == intervention_id).limit(1)
+    )
+
+
 @pest_cases_bp.post("/<int:case_id>/start-intervention")
 @login_required
 @roles_required("ADMIN", "TECHNICIAN")
@@ -662,9 +681,38 @@ def start_intervention(case_id: int):
         db.session.rollback()
         return auth_error("Intervention has already been started for this case.", 409)
 
-    if case.status != PestCaseStatus.FIELD_VALIDATED.value:
+    if case.status not in (
+        PestCaseStatus.FIELD_VALIDATED.value,
+        PestCaseStatus.REINTERVENTION_REQUIRED.value,
+    ):
         db.session.rollback()
         return auth_error("Intervention cannot be started for this case.", 409)
+
+    if case.status == PestCaseStatus.REINTERVENTION_REQUIRED.value:
+        # Repeat intervention: the preceding completed intervention must have
+        # a recorded follow-up explicitly requiring reintervention, and no
+        # other pending intervention may exist (checked above).
+        try:
+            preceding = get_latest_completed_intervention_by_case_id(case_id)
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.error("Intervention repeat lookup failed.")
+            return auth_error("Intervention service unavailable.", 503)
+        if preceding is None or preceding.completed_at is None:
+            db.session.rollback()
+            return auth_error("Intervention cannot be started for this case.", 409)
+        try:
+            preceding_follow_up = get_follow_up_by_intervention_id(preceding.id)
+        except SQLAlchemyError:
+            db.session.rollback()
+            current_app.logger.error("Intervention repeat lookup failed.")
+            return auth_error("Intervention service unavailable.", 503)
+        if preceding_follow_up is None:
+            db.session.rollback()
+            return auth_error("Intervention cannot be started for this case.", 409)
+        if preceding_follow_up.outcome != "REINTERVENTION_REQUIRED":
+            db.session.rollback()
+            return auth_error("Intervention cannot be started for this case.", 409)
 
     try:
         technician = get_user_by_id(raw_assignee)

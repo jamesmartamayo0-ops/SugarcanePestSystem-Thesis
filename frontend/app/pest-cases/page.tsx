@@ -46,6 +46,12 @@ function statusBadge(status: PestCaseStatus): string {
   if (status === "UNDER_INTERVENTION") {
     return "bg-violet-100 text-violet-800";
   }
+  if (status === "REINTERVENTION_REQUIRED") {
+    return "bg-orange-100 text-orange-800";
+  }
+  if (status === "CLOSED") {
+    return "bg-slate-800 text-white";
+  }
   if (status === "NOT_CONFIRMED") {
     return "bg-slate-200 text-slate-700";
   }
@@ -437,6 +443,12 @@ function PestCasesPageInner() {
           >
             View interventions
           </Link>
+          <Link
+            href="/follow-ups"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View follow-ups
+          </Link>
         </div>
 
         <section aria-label="Report pest case" className="mt-8">
@@ -576,6 +588,8 @@ function PestCasesPageInner() {
                 <option value="FIELD_VALIDATED">FIELD_VALIDATED</option>
                 <option value="UNDER_INTERVENTION">UNDER_INTERVENTION</option>
                 <option value="FOLLOW_UP_DUE">FOLLOW_UP_DUE</option>
+                <option value="REINTERVENTION_REQUIRED">REINTERVENTION_REQUIRED</option>
+                <option value="CLOSED">CLOSED</option>
               </select>
               <label htmlFor="farm_filter" className="text-sm font-medium text-slate-700">
                 Farm
@@ -819,7 +833,9 @@ function PestCasesPageInner() {
                     </Link>
                   </p>
                 ) : detail.status === "UNDER_INTERVENTION" ||
-                  detail.status === "FOLLOW_UP_DUE" ? (
+                  detail.status === "FOLLOW_UP_DUE" ||
+                  detail.status === "REINTERVENTION_REQUIRED" ||
+                  detail.status === "CLOSED" ? (
                   <p role="status" className="mt-6 text-sm text-slate-600">
                     This case has an intervention record.{" "}
                     <Link
@@ -827,6 +843,12 @@ function PestCasesPageInner() {
                       className="font-medium text-emerald-700 hover:text-emerald-800"
                     >
                       Go to interventions
+                    </Link>{" "}
+                    <Link
+                      href="/follow-ups"
+                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                    >
+                      Go to follow-ups
                     </Link>
                   </p>
                 ) : (

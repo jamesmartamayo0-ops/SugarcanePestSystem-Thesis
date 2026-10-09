@@ -38,12 +38,21 @@ def demo_value(prefix):
 
 
 def cleanup_demo_rows(app):
+    from app.models import FollowUp as _FollowUp
+
     with app.app_context():
         db.session.remove()
         demo_case_ids = db.session.scalars(
             select(PestCase.id).where(PestCase.pest_name.like("itest_%"))
         ).all()
         if demo_case_ids:
+            demo_intervention_ids = db.session.scalars(
+                select(Intervention.id).where(Intervention.pest_case_id.in_(demo_case_ids))
+            ).all()
+            if demo_intervention_ids:
+                db.session.execute(
+                    delete(_FollowUp).where(_FollowUp.intervention_id.in_(demo_intervention_ids))
+                )
             db.session.execute(
                 delete(Intervention).where(Intervention.pest_case_id.in_(demo_case_ids))
             )
@@ -216,6 +225,9 @@ def test_data_bearing_migration_downgrade_collapses_phase_3d_statuses(
                 assert connection.execute(
                     text("SELECT to_regclass('public.interventions')")
                 ).scalar_one() is None
+                assert connection.execute(
+                    text("SELECT to_regclass('public.follow_ups')")
+                ).scalar_one() is None
 
             with db.engine.connect() as connection:
                 transaction = connection.begin()
@@ -230,14 +242,17 @@ def test_data_bearing_migration_downgrade_collapses_phase_3d_statuses(
     finally:
         with integration_app.app_context():
             db.session.remove()
-            upgrade(directory=str(migrations), revision="e8f2a4c6d1b3")
+            upgrade(directory=str(migrations), revision="c9d4e6a8b2f1")
             with db.engine.connect() as connection:
                 assert connection.execute(
                     text("SELECT version_num FROM alembic_version")
-                ).scalar_one() == "e8f2a4c6d1b3"
+                ).scalar_one() == "c9d4e6a8b2f1"
                 assert connection.execute(
                     text("SELECT to_regclass('public.interventions')")
                 ).scalar_one() == "interventions"
+                assert connection.execute(
+                    text("SELECT to_regclass('public.follow_ups')")
+                ).scalar_one() == "follow_ups"
             db.session.remove()
         cleanup_demo_rows(integration_app)
 

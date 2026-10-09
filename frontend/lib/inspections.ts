@@ -88,7 +88,9 @@ function isStatus(value: unknown): value is PestCaseStatus {
     value === "NOT_CONFIRMED" ||
     value === "FIELD_VALIDATED" ||
     value === "UNDER_INTERVENTION" ||
-    value === "FOLLOW_UP_DUE"
+    value === "FOLLOW_UP_DUE" ||
+    value === "REINTERVENTION_REQUIRED" ||
+    value === "CLOSED"
   );
 }
 
