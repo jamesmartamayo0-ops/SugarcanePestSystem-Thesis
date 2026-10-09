@@ -71,6 +71,11 @@ function PestCasesPageInner() {
   const [cases, setCases] = useState<PestCaseSummary[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | PestCaseStatus>("all");
   const [farmFilter, setFarmFilter] = useState<string>("all");
+  const [farmerFilter, setFarmerFilter] = useState<string>("all");
+  const [searchInput, setSearchInput] = useState<string>("");
+  const [reportedFrom, setReportedFrom] = useState<string>("");
+  const [reportedTo, setReportedTo] = useState<string>("");
+  const [filterError, setFilterError] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -102,15 +107,44 @@ function PestCasesPageInner() {
   }, [auth.status, router]);
 
   const loadAll = useCallback(
-    async (status: "all" | PestCaseStatus, farmId: string) => {
+    async (options: {
+      status: "all" | PestCaseStatus;
+      farmId: string;
+      farmerId: string;
+      q: string;
+      from: string;
+      to: string;
+    }) => {
+      const trimmedQ = options.q.trim();
+      if (trimmedQ.length > 120) {
+        setFilterError("Search text must be at most 120 characters.");
+        return;
+      }
+      if (options.from !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(options.from)) {
+        setFilterError("Reported-from must use YYYY-MM-DD format.");
+        return;
+      }
+      if (options.to !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(options.to)) {
+        setFilterError("Reported-to must use YYYY-MM-DD format.");
+        return;
+      }
+      if (options.from !== "" && options.to !== "" && options.from > options.to) {
+        setFilterError("Reported-from must not be later than reported-to.");
+        return;
+      }
+      setFilterError(null);
       setLoadingList(true);
       setListError(null);
       try {
         const [loadedFarms, loadedCases] = await Promise.all([
           listFarms(),
           listPestCases({
-            status,
-            farmId: farmId === "all" ? undefined : Number(farmId),
+            status: options.status,
+            farmId: options.farmId === "all" ? undefined : Number(options.farmId),
+            farmerId: options.farmerId === "all" ? undefined : Number(options.farmerId),
+            q: trimmedQ === "" ? undefined : trimmedQ,
+            reportedFrom: options.from === "" ? undefined : options.from,
+            reportedTo: options.to === "" ? undefined : options.to,
           }),
         ]);
         setFarms(loadedFarms);
@@ -121,6 +155,10 @@ function PestCasesPageInner() {
           (failure instanceof FarmsRequestError && failure.kind === "unauthenticated")
         ) {
           router.replace("/login");
+          return;
+        }
+        if (failure instanceof PestCasesRequestError && failure.kind === "invalid") {
+          setFilterError(failure.message);
           return;
         }
         setListError(
@@ -564,10 +602,38 @@ function PestCasesPageInner() {
         </section>
 
         <section aria-label="Pest case records" className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Pest case records</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <label htmlFor="status_filter" className="text-sm font-medium text-slate-700">
+          <h2 className="text-lg font-semibold text-slate-900">Pest case records</h2>
+          <form
+            aria-label="Search and filter pest cases"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void loadAll({
+                status: statusFilter,
+                farmId: farmFilter,
+                farmerId: farmerFilter,
+                q: searchInput,
+                from: reportedFrom,
+                to: reportedTo,
+              });
+            }}
+            className="mt-4 grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <div>
+              <label htmlFor="case_search" className="block text-sm font-medium text-slate-700">
+                Search (pest, farmer, plot, barangay, ID)
+              </label>
+              <input
+                id="case_search"
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                maxLength={120}
+                autoComplete="off"
+                placeholder="e.g. Stem Borer, Juan, Plot A, Bunao"
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              />
+            </div>
+            <div>
+              <label htmlFor="status_filter" className="block text-sm font-medium text-slate-700">
                 Status
               </label>
               <select
@@ -576,9 +642,8 @@ function PestCasesPageInner() {
                 onChange={(event) => {
                   const next = event.target.value as "all" | PestCaseStatus;
                   setStatusFilter(next);
-                  void loadAll(next, farmFilter);
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
               >
                 <option value="all">All statuses</option>
                 <option value="REPORTED">REPORTED</option>
@@ -591,18 +656,16 @@ function PestCasesPageInner() {
                 <option value="REINTERVENTION_REQUIRED">REINTERVENTION_REQUIRED</option>
                 <option value="CLOSED">CLOSED</option>
               </select>
-              <label htmlFor="farm_filter" className="text-sm font-medium text-slate-700">
+            </div>
+            <div>
+              <label htmlFor="farm_filter" className="block text-sm font-medium text-slate-700">
                 Farm
               </label>
               <select
                 id="farm_filter"
                 value={farmFilter}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setFarmFilter(next);
-                  void loadAll(statusFilter, next);
-                }}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                onChange={(event) => setFarmFilter(event.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
               >
                 <option value="all">All farms</option>
                 {farms.map((entry) => (
@@ -611,16 +674,86 @@ function PestCasesPageInner() {
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label htmlFor="farmer_filter" className="block text-sm font-medium text-slate-700">
+                Farmer ID
+              </label>
+              <input
+                id="farmer_filter"
+                value={farmerFilter === "all" ? "" : farmerFilter}
+                onChange={(event) => {
+                  const next = event.target.value.trim() === "" ? "all" : event.target.value.trim();
+                  setFarmerFilter(next);
+                }}
+                placeholder="All"
+                inputMode="numeric"
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              />
+            </div>
+            <div>
+              <label htmlFor="reported_from" className="block text-sm font-medium text-slate-700">
+                Reported from
+              </label>
+              <input
+                id="reported_from"
+                type="date"
+                value={reportedFrom}
+                onChange={(event) => setReportedFrom(event.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              />
+            </div>
+            <div>
+              <label htmlFor="reported_to" className="block text-sm font-medium text-slate-700">
+                Reported to
+              </label>
+              <input
+                id="reported_to"
+                type="date"
+                value={reportedTo}
+                onChange={(event) => setReportedTo(event.target.value)}
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              />
+            </div>
+            <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
+              <button
+                type="submit"
+                disabled={loadingList}
+                className="rounded-lg bg-emerald-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+              >
+                {loadingList ? "Searching..." : "Search"}
+              </button>
               <button
                 type="button"
-                onClick={() => void loadAll(statusFilter, farmFilter)}
+                onClick={() => {
+                  setStatusFilter("all");
+                  setFarmFilter("all");
+                  setFarmerFilter("all");
+                  setSearchInput("");
+                  setReportedFrom("");
+                  setReportedTo("");
+                  setFilterError(null);
+                  void loadAll({
+                    status: "all",
+                    farmId: "all",
+                    farmerId: "all",
+                    q: "",
+                    from: "",
+                    to: "",
+                  });
+                }}
                 disabled={loadingList}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
               >
-                {loadingList ? "Refreshing..." : "Refresh"}
+                Clear filters
               </button>
             </div>
-          </div>
+          </form>
+          {filterError && (
+            <p role="alert" className="mt-3 text-sm text-red-700">
+              {filterError}
+            </p>
+          )}
           {loadingList ? (
             <p role="status" className="mt-4 text-sm text-slate-600">
               Loading pest cases...
@@ -661,13 +794,21 @@ function PestCasesPageInner() {
                       </td>
                       <td className="px-4 py-3 text-slate-900">{entry.observed_on ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <button
-                          type="button"
-                          onClick={() => void openDetail(entry.id)}
-                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                        >
-                          {selectedId === entry.id ? "Selected" : "View"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void openDetail(entry.id)}
+                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          >
+                            {selectedId === entry.id ? "Selected" : "View"}
+                          </button>
+                          <Link
+                            href={`/pest-cases/${entry.id}`}
+                            className="rounded-lg border border-emerald-700 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                          >
+                            Timeline
+                          </Link>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -693,10 +834,18 @@ function PestCasesPageInner() {
                   <h2 className="text-lg font-semibold text-slate-900">
                     {detail.pest_name}
                   </h2>
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(detail.status)}`}
-                  >
-                    {detail.status}
+                  <span className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(detail.status)}`}
+                    >
+                      {detail.status}
+                    </span>
+                    <Link
+                      href={`/pest-cases/${detail.id}`}
+                      className="rounded-lg border border-emerald-700 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                    >
+                      Full timeline
+                    </Link>
                   </span>
                 </div>
                 <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">

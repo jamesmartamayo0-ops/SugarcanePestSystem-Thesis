@@ -100,12 +100,28 @@ def pest_case(monkeypatch):
     def by_username(username):
         return next((u for u in users.values() if u.username == username), None)
 
-    def fake_list(farm_id=None, status=None):
+    def fake_list(farm_id=None, status=None, farmer_id=None, search=None, reported_from=None, reported_to=None):
         cases = sorted(case_store.values(), key=lambda c: c.id)
         if farm_id is not None:
             cases = [c for c in cases if c.farm_id == farm_id]
         if status is not None:
             cases = [c for c in cases if c.status == status]
+        if farmer_id is not None:
+            cases = [c for c in cases if farm_store.get(c.farm_id) is not None and farm_store[c.farm_id].farmer_id == farmer_id]
+        if search is not None:
+            lowered = search.lower()
+            filtered = []
+            for c in cases:
+                farm = farm_store.get(c.farm_id)
+                haystacks = [
+                    (c.pest_name or "").lower(),
+                    (c.symptoms or "").lower(),
+                    (farm.plot_identifier or "").lower() if farm else "",
+                    (farm.barangay or "").lower() if farm else "",
+                ]
+                if any(lowered in h for h in haystacks) or lowered == str(c.id):
+                    filtered.append(c)
+            cases = filtered
         return cases
 
     def fake_get(case_id):

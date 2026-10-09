@@ -1,13 +1,15 @@
 from datetime import date
 
 from flask import Blueprint, current_app, g, jsonify, request
-from sqlalchemy import select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import joinedload
 
 from app.auth import auth_error, login_required, roles_required
 from app.extensions import db
 from app.models import (
     Farm,
+    Farmer,
     FollowUp,
     Inspection,
     Intervention,
@@ -98,12 +100,53 @@ def _pest_case_detail(case: PestCase) -> dict:
     return summary
 
 
-def list_all_pest_cases(farm_id: int | None = None, status: str | None = None):
+def list_all_pest_cases(
+    farm_id: int | None = None,
+    status: str | None = None,
+    farmer_id: int | None = None,
+    search: str | None = None,
+    reported_from: date | None = None,
+    reported_to: date | None = None,
+):
     statement = select(PestCase).order_by(PestCase.id)
     if farm_id is not None:
         statement = statement.where(PestCase.farm_id == farm_id)
     if status is not None:
         statement = statement.where(PestCase.status == status)
+    if farmer_id is not None or search is not None:
+        statement = statement.join(Farm, Farm.id == PestCase.farm_id).join(
+            Farmer, Farmer.id == Farm.farmer_id
+        )
+    elif reported_from is not None or reported_to is not None:
+        pass
+    if farmer_id is not None:
+        statement = statement.where(Farmer.id == farmer_id)
+    if search is not None:
+        like = f"%{search}%"
+        conditions = [
+            PestCase.pest_name.ilike(like),
+            PestCase.symptoms.ilike(like),
+            Farmer.full_name.ilike(like),
+            Farm.plot_identifier.ilike(like),
+            Farm.barangay.ilike(like),
+            Farmer.barangay.ilike(like),
+        ]
+        if search.isdigit():
+            try:
+                candidate = int(search)
+                if 0 < candidate <= 2_147_483_647:
+                    conditions.append(PestCase.id == candidate)
+            except (TypeError, ValueError):
+                pass
+        statement = statement.where(or_(*conditions))
+    if reported_from is not None:
+        statement = statement.where(func.date(PestCase.reported_at) >= reported_from)
+    if reported_to is not None:
+        statement = statement.where(func.date(PestCase.reported_at) <= reported_to)
+    statement = statement.options(
+        joinedload(PestCase.farm).joinedload(Farm.farmer),
+        joinedload(PestCase.reporter),
+    )
     return db.session.scalars(statement).all()
 
 
@@ -181,23 +224,68 @@ def _precheck_payload(payload: dict) -> str | None:
     return None
 
 
+def _parse_iso_date(value: str | None, field: str):
+    if value is None or value == "":
+        return None, None
+    cleaned = value.strip()
+    if not cleaned or len(cleaned) > 32:
+        return None, "Invalid pest case filter."
+    try:
+        parsed = date.fromisoformat(cleaned)
+    except ValueError:
+        return None, "Invalid pest case filter."
+    return parsed, None
+
+
 def _parse_filter_args():
     raw_farm_id = request.args.get("farm_id")
+    raw_farmer_id = request.args.get("farmer_id")
     raw_status = request.args.get("status")
+    raw_q = request.args.get("q")
+    raw_from = request.args.get("reported_from")
+    raw_to = request.args.get("reported_to")
     farm_id: int | None = None
+    farmer_id: int | None = None
     status: str | None = None
+    search: str | None = None
     if raw_farm_id is not None and raw_farm_id != "":
         try:
-            farm_id = int(raw_farm_id)
-        except (TypeError, ValueError):
-            return None, None, "Invalid pest case filter."
+            farm_id = int(raw_farm_id.strip() if isinstance(raw_farm_id, str) else raw_farm_id)
+        except (TypeError, ValueError, AttributeError):
+            return None, None, None, None, None, None, "Invalid pest case filter."
         if not 0 < farm_id <= 2_147_483_647:
-            return None, None, "Invalid pest case filter."
+            return None, None, None, None, None, None, "Invalid pest case filter."
+    if raw_farmer_id is not None and raw_farmer_id != "":
+        try:
+            farmer_id = int(raw_farmer_id.strip() if isinstance(raw_farmer_id, str) else raw_farmer_id)
+        except (TypeError, ValueError, AttributeError):
+            return None, None, None, None, None, None, "Invalid pest case filter."
+        if not 0 < farmer_id <= 2_147_483_647:
+            return None, None, None, None, None, None, "Invalid pest case filter."
     if raw_status is not None and raw_status != "":
-        if raw_status not in _ALLOWED_STATUSES:
-            return None, None, "Invalid pest case filter."
-        status = raw_status
-    return farm_id, status, None
+        cleaned_status = raw_status.strip() if isinstance(raw_status, str) else raw_status
+        if cleaned_status not in _ALLOWED_STATUSES:
+            return None, None, None, None, None, None, "Invalid pest case filter."
+        status = cleaned_status
+    if raw_q is not None and raw_q != "":
+        if not isinstance(raw_q, str):
+            return None, None, None, None, None, None, "Invalid pest case filter."
+        cleaned_q = raw_q.strip()
+        if cleaned_q == "":
+            search = None
+        else:
+            if len(cleaned_q) > 120:
+                return None, None, None, None, None, None, "Invalid pest case filter."
+            search = cleaned_q
+    reported_from, invalid = _parse_iso_date(raw_from, "reported_from")
+    if invalid is not None:
+        return None, None, None, None, None, None, invalid
+    reported_to, invalid = _parse_iso_date(raw_to, "reported_to")
+    if invalid is not None:
+        return None, None, None, None, None, None, invalid
+    if reported_from is not None and reported_to is not None and reported_from > reported_to:
+        return None, None, None, None, None, None, "Invalid pest case filter."
+    return farm_id, farmer_id, status, search, reported_from, reported_to, None
 
 
 @pest_cases_bp.after_request
@@ -211,11 +299,11 @@ def _no_store_pest_cases_response(response):
 @login_required
 @roles_required("ADMIN", "TECHNICIAN")
 def list_pest_cases():
-    farm_id, status, invalid = _parse_filter_args()
+    farm_id, farmer_id, status, search, reported_from, reported_to, invalid = _parse_filter_args()
     if invalid is not None:
         return auth_error(invalid, 400)
     try:
-        cases = list_all_pest_cases(farm_id, status)
+        cases = list_all_pest_cases(farm_id, status, farmer_id, search, reported_from, reported_to)
     except SQLAlchemyError:
         db.session.rollback()
         current_app.logger.error("Pest case list failed.")
@@ -784,3 +872,264 @@ def start_intervention(case_id: int):
     response = jsonify({"data": {"intervention": detail}, "message": "Intervention started."})
     response.status_code = 201
     return response
+
+
+def get_inspections_by_case_id(case_id: int):
+    return db.session.scalars(
+        select(Inspection).where(Inspection.pest_case_id == case_id).order_by(Inspection.id)
+    ).all()
+
+
+def get_interventions_by_case_id(case_id: int):
+    return db.session.scalars(
+        select(Intervention).where(Intervention.pest_case_id == case_id).order_by(Intervention.id)
+    ).all()
+
+
+def get_follow_ups_by_case_id(case_id: int):
+    return db.session.scalars(
+        select(FollowUp)
+        .join(Intervention, Intervention.id == FollowUp.intervention_id)
+        .where(Intervention.pest_case_id == case_id)
+        .order_by(FollowUp.id)
+    ).all()
+
+
+def _user_ref_or_none(user) -> dict | None:
+    if user is None:
+        return None
+    return {"id": user.id, "username": user.username, "full_name": user.full_name}
+
+
+def build_case_timeline(case: PestCase) -> list:
+    try:
+        inspection = get_inspection_by_case_id(case.id)
+    except SQLAlchemyError:
+        raise
+    interventions = get_interventions_by_case_id(case.id)
+    follow_ups = get_follow_ups_by_case_id(case.id)
+    follow_by_intervention = {item.intervention_id: item for item in follow_ups}
+
+    events: list = []
+
+    def add_event(
+        event_type: str,
+        category: str,
+        title: str,
+        description: str,
+        occurred_at,
+        event_date,
+        sequence: int,
+        stable_id: int,
+        actor=None,
+        cycle=None,
+        metadata=None,
+    ):
+        events.append(
+            {
+                "event_type": event_type,
+                "category": category,
+                "title": title,
+                "description": description,
+                "occurred_at": occurred_at.isoformat() if occurred_at is not None else None,
+                "event_date": event_date.isoformat() if event_date is not None else None,
+                "actor": _user_ref_or_none(actor),
+                "cycle": cycle,
+                "metadata": metadata or {},
+                "_sequence": sequence,
+                "_stable_id": stable_id,
+            }
+        )
+
+    # Case reported: authoritative created timestamp.
+    add_event(
+        "case_reported",
+        "CASE",
+        "Pest case reported",
+        f"{case.pest_name} reported for farm #{case.farm_id}.",
+        case.reported_at,
+        case.observed_on,
+        10,
+        case.id * 1000 + 1,
+        actor=case.reporter,
+        metadata={"status": case.status, "reported_area_hectares": float(case.reported_area_hectares)},
+    )
+
+    # Submitted for inspection: exact submission time and submitting user are
+    # not stored. Any ADMIN or TECHNICIAN may have performed the transition,
+    # so no actor is attributed. Show only when the case has demonstrably
+    # moved beyond REPORTED, using the earliest related authoritative
+    # timestamp without inventing history.
+    if inspection is not None or case.status != PestCaseStatus.REPORTED.value:
+        submitted_at = inspection.created_at if inspection is not None else case.updated_at
+        add_event(
+            "submitted_for_inspection",
+            "CASE",
+            "Submitted for inspection",
+            "Case moved from REPORTED to FOR_INSPECTION. Exact submission time is "
+            "not stored; shown using the earliest related record.",
+            submitted_at,
+            None,
+            20,
+            case.id * 1000 + 2,
+            actor=None,
+            metadata={"inferred_timestamp": True},
+        )
+
+    if inspection is not None:
+        add_event(
+            "inspection_scheduled",
+            "INSPECTION",
+            "Inspection scheduled",
+            f"Inspection scheduled for {inspection.scheduled_for.isoformat()}.",
+            inspection.created_at,
+            inspection.scheduled_for,
+            30,
+            inspection.id * 1000 + 3,
+            actor=inspection.scheduler,
+            metadata={
+                "inspection_id": inspection.id,
+                "scheduled_for": inspection.scheduled_for.isoformat(),
+                "assigned_to": _user_ref_or_none(inspection.assignee),
+            },
+        )
+        # No reschedule history is stored; only the current scheduled_for is shown.
+        if inspection.completed_at is not None:
+            outcome = "confirmed" if inspection.pest_confirmed else "not confirmed"
+            add_event(
+                "inspection_findings_recorded",
+                "INSPECTION",
+                f"Field findings recorded ({outcome})",
+                (inspection.findings or "")[:500],
+                inspection.completed_at,
+                inspection.inspected_on,
+                40,
+                inspection.id * 1000 + 4,
+                actor=inspection.completer,
+                metadata={
+                    "inspection_id": inspection.id,
+                    "pest_confirmed": bool(inspection.pest_confirmed),
+                    "validated_area_hectares": float(inspection.validated_area_hectares)
+                    if inspection.validated_area_hectares is not None
+                    else None,
+                },
+            )
+
+    for index, intervention in enumerate(interventions, start=1):
+        base = 50 + (index - 1) * 3
+        add_event(
+            "intervention_started",
+            "INTERVENTION",
+            f"Intervention cycle {index} started",
+            f"{intervention.method_category}: {intervention.method_description[:300]}",
+            intervention.created_at,
+            intervention.scheduled_for,
+            base,
+            intervention.id * 1000 + 5,
+            actor=intervention.creator,
+            cycle=index,
+            metadata={
+                "intervention_id": intervention.id,
+                "method_category": intervention.method_category,
+                "assigned_to": _user_ref_or_none(intervention.assignee),
+            },
+        )
+        if intervention.completed_at is not None:
+            add_event(
+                "intervention_completed",
+                "INTERVENTION",
+                f"Intervention cycle {index} completed",
+                (intervention.completion_notes or "")[:500],
+                intervention.completed_at,
+                intervention.performed_on,
+                base + 1,
+                intervention.id * 1000 + 6,
+                actor=intervention.completer,
+                cycle=index,
+                metadata={
+                    "intervention_id": intervention.id,
+                    "follow_up_due_on": intervention.follow_up_due_on.isoformat()
+                    if intervention.follow_up_due_on is not None
+                    else None,
+                },
+            )
+        follow_up = follow_by_intervention.get(intervention.id)
+        if follow_up is not None:
+            outcome_label = (
+                "resolved" if follow_up.outcome == "RESOLVED" else "further intervention required"
+            )
+            add_event(
+                "follow_up_recorded",
+                "FOLLOW_UP",
+                f"Follow-up recorded for cycle {index} ({outcome_label})",
+                (follow_up.assessment_notes or "")[:500],
+                follow_up.created_at,
+                follow_up.observed_on,
+                base + 2,
+                follow_up.id * 1000 + 7,
+                actor=follow_up.recorder,
+                cycle=index,
+                metadata={
+                    "follow_up_id": follow_up.id,
+                    "intervention_id": intervention.id,
+                    "outcome": follow_up.outcome,
+                    "pest_observed": bool(follow_up.pest_observed),
+                    "observed_affected_area_hectares": float(
+                        follow_up.observed_affected_area_hectares
+                    )
+                    if follow_up.observed_affected_area_hectares is not None
+                    else None,
+                },
+            )
+
+    if case.status == PestCaseStatus.CLOSED.value:
+        add_event(
+            "case_closed",
+            "CLOSURE",
+            "Case closed",
+            "Final recorded follow-up outcome was resolved. Shown using the case "
+            "updated timestamp as the closest authoritative record.",
+            case.updated_at,
+            None,
+            100,
+            case.id * 1000 + 8,
+            actor=None,
+            metadata={"status": case.status},
+        )
+
+    def _sort_key(event: dict):
+        occurred = event["occurred_at"] or event["event_date"] or ""
+        return (occurred, event["_sequence"], event["_stable_id"])
+
+    ordered = sorted(events, key=_sort_key)
+    for event in ordered:
+        event.pop("_sequence", None)
+        event.pop("_stable_id", None)
+    return ordered
+
+
+@pest_cases_bp.get("/<int:case_id>/timeline")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def get_pest_case_timeline(case_id: int):
+    try:
+        case = get_pest_case_by_id(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Pest case timeline lookup failed.")
+        return auth_error("Pest case service unavailable.", 503)
+    if case is None:
+        return auth_error("Pest case not found.", 404)
+    try:
+        timeline = build_case_timeline(case)
+        detail = _pest_case_detail(case)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Pest case timeline build failed.")
+        return auth_error("Pest case service unavailable.", 503)
+    return jsonify(
+        {
+            "data": {"pest_case": detail, "timeline": timeline},
+            "message": "Pest case timeline retrieved.",
+        }
+    )

@@ -8,6 +8,7 @@ from app.extensions import db, migrate
 from app.models import Farm, Farmer, FollowUp, Inspection, Intervention, PestCase, User  # Register model metadata before Flask-Migrate initializes.
 from app.routes.admin import admin_bp
 from app.routes.auth import auth_bp
+from app.routes.dashboard import dashboard_bp
 from app.routes.farmers import farmers_bp
 from app.routes.farms import farms_bp
 from app.routes.follow_ups import follow_ups_bp
@@ -36,6 +37,7 @@ def create_app() -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(dashboard_bp)
     app.register_blueprint(farmers_bp)
     app.register_blueprint(farms_bp)
     app.register_blueprint(pest_cases_bp)

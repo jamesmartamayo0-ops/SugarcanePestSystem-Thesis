@@ -210,6 +210,10 @@ function parseSingleCase(payload: unknown, fallback: string): PestCaseDetail {
   return parseDetail((data as { pest_case: unknown }).pest_case, fallback);
 }
 
+export function parsePestCaseDetail(value: unknown): PestCaseDetail {
+  return parseDetail(value, "Case timeline could not be read.");
+}
+
 function throwForStatus(status: number, payload: unknown, fallback: string): never {
   if (status === 400) {
     throw new PestCasesRequestError("invalid", serverMessage(payload, fallback));
@@ -240,7 +244,11 @@ function throwForStatus(status: number, payload: unknown, fallback: string): nev
 
 export type PestCaseFilters = {
   farmId?: number;
+  farmerId?: number;
   status?: PestCaseStatus | "all";
+  q?: string;
+  reportedFrom?: string;
+  reportedTo?: string;
 };
 
 export async function listPestCases(filters: PestCaseFilters = {}): Promise<PestCaseSummary[]> {
@@ -248,8 +256,20 @@ export async function listPestCases(filters: PestCaseFilters = {}): Promise<Pest
   if (filters.farmId !== undefined) {
     params.set("farm_id", String(filters.farmId));
   }
+  if (filters.farmerId !== undefined) {
+    params.set("farmer_id", String(filters.farmerId));
+  }
   if (filters.status !== undefined && filters.status !== "all") {
     params.set("status", filters.status);
+  }
+  if (filters.q !== undefined && filters.q.trim() !== "") {
+    params.set("q", filters.q.trim());
+  }
+  if (filters.reportedFrom !== undefined && filters.reportedFrom !== "") {
+    params.set("reported_from", filters.reportedFrom);
+  }
+  if (filters.reportedTo !== undefined && filters.reportedTo !== "") {
+    params.set("reported_to", filters.reportedTo);
   }
   const query = params.toString();
   const path = query ? `/api/v1/pest-cases?${query}` : "/api/v1/pest-cases";
