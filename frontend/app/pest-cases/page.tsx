@@ -487,6 +487,12 @@ function PestCasesPageInner() {
           >
             View follow-ups
           </Link>
+          <Link
+            href="/reports"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View reports
+          </Link>
         </div>
 
         <section aria-label="Report pest case" className="mt-8">

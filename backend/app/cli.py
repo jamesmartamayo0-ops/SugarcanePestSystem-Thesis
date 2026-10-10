@@ -2,11 +2,29 @@ import click
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from app.demo_data import seed_demo_data
 from app.extensions import db
 from app.models import User, UserRole, normalize_username
 
 
 def register_cli(app) -> None:
+    @app.cli.command("seed-demo-data")
+    def seed_demo_data_command() -> None:
+        """Seed deterministic synthetic demo data (test database only)."""
+        try:
+            result = seed_demo_data()
+        except RuntimeError as exc:
+            raise click.ClickException(str(exc)) from None
+        except SQLAlchemyError as exc:
+            db.session.rollback()
+            raise click.ClickException("Unable to seed demo data.") from exc
+        if not result.get("seeded"):
+            click.echo(str(result.get("reason")))
+            return
+        click.echo(
+            f"Demo data seeded: {result['farmers']} farmers, {result['farms']} farms."
+        )
+
     @app.cli.command("create-admin")
     def create_admin() -> None:
         """Interactively bootstrap the first administrator."""

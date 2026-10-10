@@ -372,6 +372,12 @@ export default function FollowUpsPage() {
           >
             View interventions
           </Link>
+          <Link
+            href="/reports"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View reports
+          </Link>
         </div>
 
         <section aria-label="Pending follow-up queue" className="mt-8">

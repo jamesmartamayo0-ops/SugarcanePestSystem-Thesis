@@ -480,6 +480,12 @@ export default function InspectionsPage() {
           >
             View pest cases
           </Link>
+          <Link
+            href="/reports"
+            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+          >
+            View reports
+          </Link>
         </div>
 
         <section aria-label="Schedule inspection" className="mt-8">

@@ -16,6 +16,7 @@ from app.routes.health import health_bp
 from app.routes.inspections import inspections_bp
 from app.routes.interventions import interventions_bp
 from app.routes.pest_cases import pest_cases_bp
+from app.routes.reports import reports_bp
 
 
 def create_app() -> Flask:
@@ -41,6 +42,7 @@ def create_app() -> Flask:
     app.register_blueprint(farmers_bp)
     app.register_blueprint(farms_bp)
     app.register_blueprint(pest_cases_bp)
+    app.register_blueprint(reports_bp)
     app.register_blueprint(inspections_bp)
     app.register_blueprint(interventions_bp)
     app.register_blueprint(follow_ups_bp)
