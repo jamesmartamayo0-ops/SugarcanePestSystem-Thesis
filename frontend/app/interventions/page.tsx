@@ -585,9 +585,10 @@ export default function InterventionsPage() {
                   id="pest_case_id"
                   name="pest_case_id"
                   required
+                  defaultValue=""
                   className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
                 >
-                  <option value="" disabled selected>
+                  <option value="" disabled>
                     Select a case
                   </option>
                   {eligibleCases.map((entry) => (
@@ -606,9 +607,10 @@ export default function InterventionsPage() {
                   id="method_category"
                   name="method_category"
                   required
+                  defaultValue=""
                   className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
                 >
-                  <option value="" disabled selected>
+                  <option value="" disabled>
                     Select a category
                   </option>
                   {INTERVENTION_METHOD_CATEGORIES.map((category) => (
@@ -640,9 +642,10 @@ export default function InterventionsPage() {
                   id="assigned_to_user_id"
                   name="assigned_to_user_id"
                   required
+                  defaultValue=""
                   className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
                 >
-                  <option value="" disabled selected>
+                  <option value="" disabled>
                     Select a technician
                   </option>
                   {technicians.map((tech) => (

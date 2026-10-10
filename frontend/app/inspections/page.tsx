@@ -508,9 +508,10 @@ export default function InspectionsPage() {
                   id="pest_case_id"
                   name="pest_case_id"
                   required
+                  defaultValue=""
                   className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
                 >
-                  <option value="" disabled selected>
+                  <option value="" disabled>
                     Select a case
                   </option>
                   {eligibleCases.map((entry) => (
@@ -531,9 +532,10 @@ export default function InspectionsPage() {
                   id="assigned_to_user_id"
                   name="assigned_to_user_id"
                   required
+                  defaultValue=""
                   className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
                 >
-                  <option value="" disabled selected>
+                  <option value="" disabled>
                     Select a technician
                   </option>
                   {technicians.map((tech) => (
@@ -848,9 +850,10 @@ export default function InspectionsPage() {
                               id="pest_confirmed"
                               name="pest_confirmed"
                               required
+                              defaultValue=""
                               className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
                             >
-                              <option value="" disabled selected>
+                              <option value="" disabled>
                                 Select confirmation
                               </option>
                               <option value="true">Yes — damage confirmed</option>
