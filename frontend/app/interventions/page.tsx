@@ -272,6 +272,9 @@ export default function InterventionsPage() {
     if (auth.status !== "authenticated") {
       return;
     }
+    setNotice(null);
+    setFormError(null);
+    setActionError(null);
     const data = new FormData(event.currentTarget);
     const caseRaw = data.get("pest_case_id");
     const categoryRaw = data.get("method_category");
@@ -300,8 +303,6 @@ export default function InterventionsPage() {
     const followUp =
       typeof followRaw === "string" && followRaw.trim() !== "" ? followRaw.trim() : undefined;
     setStarting(true);
-    setFormError(null);
-    setNotice(null);
     try {
       const created = await startIntervention(
         caseId,
@@ -318,6 +319,7 @@ export default function InterventionsPage() {
         [...current, created].sort((left, right) => left.id - right.id),
       );
       setEligibleCases((current) => current.filter((entry) => entry.id !== caseId));
+      setFormError(null);
       setNotice(`Intervention #${created.id} was started.`);
       event.currentTarget.reset();
     } catch (failure) {
@@ -328,6 +330,7 @@ export default function InterventionsPage() {
         router.replace("/login");
         return;
       }
+      setNotice(null);
       setFormError(
         failure instanceof InterventionsRequestError
           ? failure.message
@@ -343,6 +346,9 @@ export default function InterventionsPage() {
     if (auth.status !== "authenticated") {
       return;
     }
+    setNotice(null);
+    setFormError(null);
+    setActionError(null);
     const data = new FormData(event.currentTarget);
     const categoryRaw = data.get("method_category");
     const descriptionRaw = data.get("method_description");
@@ -393,13 +399,13 @@ export default function InterventionsPage() {
       return;
     }
     setSavingPlan(true);
-    setActionError(null);
     try {
       const updated = await updateInterventionPlan(target.id, payload, auth.csrfToken);
       setDetail(updated);
       setInterventions((current) =>
         current.map((entry) => (entry.id === updated.id ? updated : entry)),
       );
+      setActionError(null);
       setNotice(`Intervention #${updated.id} plan was updated.`);
     } catch (failure) {
       if (
@@ -409,6 +415,7 @@ export default function InterventionsPage() {
         router.replace("/login");
         return;
       }
+      setNotice(null);
       setActionError(
         failure instanceof InterventionsRequestError
           ? failure.message
@@ -424,6 +431,9 @@ export default function InterventionsPage() {
     if (auth.status !== "authenticated") {
       return;
     }
+    setNotice(null);
+    setFormError(null);
+    setActionError(null);
     const data = new FormData(event.currentTarget);
     const performedRaw = data.get("performed_on");
     const notesRaw = data.get("completion_notes");
@@ -447,7 +457,6 @@ export default function InterventionsPage() {
       return;
     }
     setCompleting(true);
-    setActionError(null);
     try {
       const updated = await completeIntervention(
         target.id,
@@ -463,6 +472,7 @@ export default function InterventionsPage() {
       setInterventions((current) =>
         current.map((entry) => (entry.id === updated.id ? updated : entry)),
       );
+      setActionError(null);
       setNotice(`Intervention #${updated.id} was completed.`);
     } catch (failure) {
       if (
@@ -472,6 +482,7 @@ export default function InterventionsPage() {
         router.replace("/login");
         return;
       }
+      setNotice(null);
       setActionError(
         failure instanceof InterventionsRequestError
           ? failure.message

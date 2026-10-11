@@ -214,6 +214,8 @@ export default function FollowUpsPage() {
     if (auth.status !== "authenticated") {
       return;
     }
+    setNotice(null);
+    setFormError(null);
     if (selectedInterventionId === null) {
       setFormError("Select a pending intervention from the queue first.");
       return;
@@ -264,8 +266,6 @@ export default function FollowUpsPage() {
       return;
     }
     setRecording(true);
-    setFormError(null);
-    setNotice(null);
     try {
       const created = await recordFollowUp(
         selectedInterventionId,
@@ -285,6 +285,7 @@ export default function FollowUpsPage() {
         current.filter((entry) => entry.intervention_id !== selectedInterventionId),
       );
       setSelectedInterventionId(null);
+      setFormError(null);
       setNotice(
         created.outcome === "RESOLVED"
           ? `Follow-up #${created.id} recorded. Case #${created.pest_case?.id ?? ""} is now CLOSED.`
@@ -296,6 +297,7 @@ export default function FollowUpsPage() {
         router.replace("/login");
         return;
       }
+      setNotice(null);
       setFormError(
         failure instanceof FollowUpsRequestError
           ? failure.message
