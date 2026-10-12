@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import { workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   FarmsRequestError,
@@ -37,30 +38,7 @@ function parseArea(raw: string): number | null {
 }
 
 function statusBadge(status: PestCaseStatus): string {
-  if (status === "FIELD_VALIDATED") {
-    return "bg-emerald-100 text-emerald-800";
-  }
-  if (status === "FOLLOW_UP_DUE") {
-    return "bg-teal-100 text-teal-800";
-  }
-  if (status === "UNDER_INTERVENTION") {
-    return "bg-violet-100 text-violet-800";
-  }
-  if (status === "REINTERVENTION_REQUIRED") {
-    return "bg-orange-100 text-orange-800";
-  }
-  if (status === "CLOSED") {
-    return "bg-slate-800 text-white";
-  }
-  if (status === "NOT_CONFIRMED") {
-    return "bg-slate-200 text-slate-700";
-  }
-  if (status === "INSPECTION_SCHEDULED") {
-    return "bg-violet-100 text-violet-800";
-  }
-  return status === "REPORTED"
-    ? "bg-amber-100 text-amber-800"
-    : "bg-sky-100 text-sky-800";
+  return `gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`;
 }
 
 function PestCasesPageInner() {
@@ -446,69 +424,32 @@ function PestCasesPageInner() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">Pest Cases</h1>
+        <p className="gov-page-description">
+          Record and manage reported sugarcane pest cases through the inspection and
+          intervention workflow.
         </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">Pest Case Reporting</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Report pest observations per farm plot. Reported area is a pre-inspection
-          estimate and must not exceed the farm&apos;s recorded sugarcane area.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
-          <Link
-            href="/farms"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View farms
-          </Link>
-          <Link
-            href="/inspections"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View inspections
-          </Link>
-          <Link
-            href="/interventions"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View interventions
-          </Link>
-          <Link
-            href="/follow-ups"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View follow-ups
-          </Link>
-          <Link
-            href="/reports"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View reports
-          </Link>
-        </div>
+      </header>
 
-        <section aria-label="Report pest case" className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900">Report pest case</h2>
+        <section aria-label="Report pest case" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Report pest case</h2>
+          <p className="gov-field-help">
+            Reported area is a pre-inspection estimate and must not exceed the farm&apos;s recorded sugarcane area.
+          </p>
           {farms.length === 0 && !loadingList ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Record a farm first before reporting a pest case.{" "}
-              <Link href="/farms" className="font-medium text-emerald-700 hover:text-emerald-800">
+              <Link href="/farms" className="gov-activity-link">
                 Go to farms
               </Link>
             </p>
           ) : (
-            <form onSubmit={handleCreate} className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="farm_id" className="block text-sm font-medium text-slate-700">
-                  Farm
+            <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+              <div className="gov-field">
+                <label htmlFor="farm_id" className="gov-label">
+                  Farm <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="farm_id"
@@ -516,7 +457,7 @@ function PestCasesPageInner() {
                   required
                   value={preselectedFarmId}
                   onChange={(event) => setPreselectedFarmId(event.target.value)}
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-select"
                 >
                   <option value="" disabled>
                     Select a farm
@@ -529,9 +470,9 @@ function PestCasesPageInner() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label htmlFor="pest_name" className="block text-sm font-medium text-slate-700">
-                  Pest name
+              <div className="gov-field">
+                <label htmlFor="pest_name" className="gov-label">
+                  Pest name <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="pest_name"
@@ -541,11 +482,11 @@ function PestCasesPageInner() {
                   maxLength={120}
                   required
                   placeholder="e.g. Stem Borer"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-input"
                 />
               </div>
-              <div className="sm:col-span-2">
-                <label htmlFor="symptoms" className="block text-sm font-medium text-slate-700">
+              <div className="gov-field gov-field-wide">
+                <label htmlFor="symptoms" className="gov-label">
                   Symptoms / observations (optional)
                 </label>
                 <textarea
@@ -554,23 +495,23 @@ function PestCasesPageInner() {
                   rows={3}
                   maxLength={2000}
                   placeholder="e.g. Bored stalks and wilting shoots on the east rows"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-textarea"
                 />
               </div>
-              <div>
-                <label htmlFor="observed_on" className="block text-sm font-medium text-slate-700">
+              <div className="gov-field">
+                <label htmlFor="observed_on" className="gov-label">
                   Observation date (optional)
                 </label>
                 <input
                   id="observed_on"
                   name="observed_on"
                   type="date"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-input"
                 />
               </div>
-              <div>
-                <label htmlFor="reported_area_hectares" className="block text-sm font-medium text-slate-700">
-                  Estimated affected area (hectares)
+              <div className="gov-field">
+                <label htmlFor="reported_area_hectares" className="gov-label">
+                  Estimated affected area (hectares) <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="reported_area_hectares"
@@ -581,14 +522,14 @@ function PestCasesPageInner() {
                   step={0.01}
                   required
                   placeholder="e.g. 1.25"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-input"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="gov-form-actions">
                 <button
                   type="submit"
                   disabled={creating}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                  className="gov-button gov-button-primary"
                 >
                   {creating ? "Reporting..." : "Report pest case"}
                 </button>
@@ -596,19 +537,19 @@ function PestCasesPageInner() {
             </form>
           )}
           {formError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {formError}
             </p>
           )}
           {formNotice && (
-            <p role="status" className="mt-4 text-sm text-emerald-700">
+            <p role="status" className="gov-alert gov-alert-success mt-4">
               {formNotice}
             </p>
           )}
         </section>
 
-        <section aria-label="Pest case records" className="mt-10">
-          <h2 className="text-lg font-semibold text-slate-900">Pest case records</h2>
+        <section aria-label="Pest case records" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Pest case records</h2>
           <form
             aria-label="Search and filter pest cases"
             onSubmit={(event) => {
@@ -622,10 +563,10 @@ function PestCasesPageInner() {
                 to: reportedTo,
               });
             }}
-            className="mt-4 grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-3"
+            className="gov-form gov-record-filters"
           >
-            <div>
-              <label htmlFor="case_search" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="case_search" className="gov-label">
                 Search (pest, farmer, plot, barangay, ID)
               </label>
               <input
@@ -635,11 +576,11 @@ function PestCasesPageInner() {
                 maxLength={120}
                 autoComplete="off"
                 placeholder="e.g. Stem Borer, Juan, Plot A, Bunao"
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="status_filter" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="status_filter" className="gov-label">
                 Status
               </label>
               <select
@@ -649,29 +590,29 @@ function PestCasesPageInner() {
                   const next = event.target.value as "all" | PestCaseStatus;
                   setStatusFilter(next);
                 }}
-                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-select"
               >
                 <option value="all">All statuses</option>
-                <option value="REPORTED">REPORTED</option>
-                <option value="FOR_INSPECTION">FOR_INSPECTION</option>
-                <option value="INSPECTION_SCHEDULED">INSPECTION_SCHEDULED</option>
-                <option value="NOT_CONFIRMED">NOT_CONFIRMED</option>
-                <option value="FIELD_VALIDATED">FIELD_VALIDATED</option>
-                <option value="UNDER_INTERVENTION">UNDER_INTERVENTION</option>
-                <option value="FOLLOW_UP_DUE">FOLLOW_UP_DUE</option>
-                <option value="REINTERVENTION_REQUIRED">REINTERVENTION_REQUIRED</option>
-                <option value="CLOSED">CLOSED</option>
+                <option value="REPORTED">{workflowLabel("REPORTED")}</option>
+                <option value="FOR_INSPECTION">{workflowLabel("FOR_INSPECTION")}</option>
+                <option value="INSPECTION_SCHEDULED">{workflowLabel("INSPECTION_SCHEDULED")}</option>
+                <option value="NOT_CONFIRMED">{workflowLabel("NOT_CONFIRMED")}</option>
+                <option value="FIELD_VALIDATED">{workflowLabel("FIELD_VALIDATED")}</option>
+                <option value="UNDER_INTERVENTION">{workflowLabel("UNDER_INTERVENTION")}</option>
+                <option value="FOLLOW_UP_DUE">{workflowLabel("FOLLOW_UP_DUE")}</option>
+                <option value="REINTERVENTION_REQUIRED">{workflowLabel("REINTERVENTION_REQUIRED")}</option>
+                <option value="CLOSED">{workflowLabel("CLOSED")}</option>
               </select>
             </div>
-            <div>
-              <label htmlFor="farm_filter" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="farm_filter" className="gov-label">
                 Farm
               </label>
               <select
                 id="farm_filter"
                 value={farmFilter}
                 onChange={(event) => setFarmFilter(event.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-select"
               >
                 <option value="all">All farms</option>
                 {farms.map((entry) => (
@@ -681,8 +622,8 @@ function PestCasesPageInner() {
                 ))}
               </select>
             </div>
-            <div>
-              <label htmlFor="farmer_filter" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="farmer_filter" className="gov-label">
                 Farmer ID
               </label>
               <input
@@ -694,11 +635,11 @@ function PestCasesPageInner() {
                 }}
                 placeholder="All"
                 inputMode="numeric"
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="reported_from" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="reported_from" className="gov-label">
                 Reported from
               </label>
               <input
@@ -706,11 +647,11 @@ function PestCasesPageInner() {
                 type="date"
                 value={reportedFrom}
                 onChange={(event) => setReportedFrom(event.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="reported_to" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="reported_to" className="gov-label">
                 Reported to
               </label>
               <input
@@ -718,14 +659,14 @@ function PestCasesPageInner() {
                 type="date"
                 value={reportedTo}
                 onChange={(event) => setReportedTo(event.target.value)}
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                className="gov-input"
               />
             </div>
-            <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
+            <div className="gov-form-actions">
               <button
                 type="submit"
                 disabled={loadingList}
-                className="rounded-lg bg-emerald-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-primary gov-button-compact"
               >
                 {loadingList ? "Searching..." : "Search"}
               </button>
@@ -749,68 +690,68 @@ function PestCasesPageInner() {
                   });
                 }}
                 disabled={loadingList}
-                className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-secondary gov-button-compact"
               >
                 Clear filters
               </button>
             </div>
           </form>
           {filterError && (
-            <p role="alert" className="mt-3 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-3">
               {filterError}
             </p>
           )}
           {loadingList ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading pest cases...
             </p>
           ) : listError ? (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
             </p>
           ) : cases.length === 0 ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               No pest cases found. Report the first case above.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[720px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Pest</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Area (ha)</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Observed</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Pest</th>
+                    <th scope="col">Area (ha)</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Observed</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {cases.map((entry) => (
                     <tr key={entry.id}>
-                      <td className="px-4 py-3 text-slate-900">{entry.pest_name}</td>
-                      <td className="px-4 py-3 text-slate-900">
+                      <td>{entry.pest_name}</td>
+                      <td>
                         {entry.reported_area_hectares.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(entry.status)}`}
+                          className={statusBadge(entry.status)}
                         >
-                          {entry.status}
+                          {workflowLabel(entry.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-900">{entry.observed_on ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
+                      <td>{entry.observed_on ?? "—"}</td>
+                      <td>
+                        <div className="gov-table-actions">
                           <button
                             type="button"
                             onClick={() => void openDetail(entry.id)}
-                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            className="gov-button gov-button-secondary gov-button-compact"
                           >
                             {selectedId === entry.id ? "Selected" : "View"}
                           </button>
                           <Link
                             href={`/pest-cases/${entry.id}`}
-                            className="rounded-lg border border-emerald-700 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                            className="gov-button gov-button-secondary gov-button-compact"
                           >
                             Timeline
                           </Link>
@@ -825,66 +766,66 @@ function PestCasesPageInner() {
         </section>
 
         {selectedId !== null && (
-          <section aria-label="Pest case detail" className="mt-8 rounded-xl border border-slate-200 p-6">
+          <section aria-label="Pest case detail" className="gov-card gov-record-section">
             {loadingDetail ? (
-              <p role="status" className="text-sm text-slate-600">
+              <p role="status" className="gov-page-description">
                 Loading pest case details...
               </p>
             ) : detailError ? (
-              <p role="alert" className="text-sm text-red-700">
+              <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}
               </p>
             ) : detail ? (
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">
+                <div className="gov-record-toolbar">
+                  <h2 className="gov-record-title">
                     {detail.pest_name}
                   </h2>
-                  <span className="flex items-center gap-2">
+                  <span className="gov-table-actions">
                     <span
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(detail.status)}`}
+                      className={statusBadge(detail.status)}
                     >
-                      {detail.status}
+                      {workflowLabel(detail.status)}
                     </span>
                     <Link
                       href={`/pest-cases/${detail.id}`}
-                      className="rounded-lg border border-emerald-700 px-3 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                      className="gov-button gov-button-secondary gov-button-compact"
                     >
                       Full timeline
                     </Link>
                   </span>
                 </div>
-                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <dl className="gov-detail-grid">
                   <div>
-                    <dt className="font-medium text-slate-600">Farm plot</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Farm plot</dt>
+                    <dd className="gov-detail-value">
                       {detail.farm.plot_identifier} — {detail.farm.barangay} (
                       {detail.farm.area_hectares.toFixed(2)} ha)
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Farmer</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Farmer</dt>
+                    <dd className="gov-detail-value">
                       {detail.farm.farmer.full_name} — {detail.farm.farmer.barangay}
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Estimated affected area</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Estimated affected area</dt>
+                    <dd className="gov-detail-value">
                       {detail.reported_area_hectares.toFixed(2)} ha
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Observed on</dt>
-                    <dd className="text-slate-900">{detail.observed_on ?? "—"}</dd>
+                    <dt className="gov-detail-label">Observed on</dt>
+                    <dd className="gov-detail-value">{detail.observed_on ?? "—"}</dd>
                   </div>
-                  <div className="sm:col-span-2">
-                    <dt className="font-medium text-slate-600">Symptoms</dt>
-                    <dd className="text-slate-900">{detail.symptoms ?? "—"}</dd>
+                  <div className="gov-detail-wide">
+                    <dt className="gov-detail-label">Symptoms</dt>
+                    <dd className="gov-detail-value">{detail.symptoms ?? "—"}</dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Reported by</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Reported by</dt>
+                    <dd className="gov-detail-value">
                       {detail.reporter.full_name} ({detail.reporter.username})
                     </dd>
                   </div>
@@ -892,14 +833,14 @@ function PestCasesPageInner() {
 
                 {detail.status === "REPORTED" ? (
                   <div className="mt-6">
-                    <h3 className="text-sm font-semibold text-slate-900">Edit report details</h3>
+                    <h3 className="gov-record-title">Edit report details</h3>
                     <form
                       onSubmit={(event) => void handleEdit(event, detail)}
-                      className="mt-3 grid gap-4 sm:grid-cols-2"
+                      className="gov-form gov-form-grid"
                     >
-                      <div>
-                        <label htmlFor="edit_pest_name" className="block text-sm font-medium text-slate-700">
-                          Pest name
+                      <div className="gov-field">
+                        <label htmlFor="edit_pest_name" className="gov-label">
+                          Pest name <span className="gov-required" aria-hidden="true">*</span>
                         </label>
                         <input
                           id="edit_pest_name"
@@ -909,12 +850,12 @@ function PestCasesPageInner() {
                           maxLength={120}
                           required
                           defaultValue={detail.pest_name}
-                          className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                          className="gov-input"
                         />
                       </div>
-                      <div>
-                        <label htmlFor="edit_area" className="block text-sm font-medium text-slate-700">
-                          Estimated affected area (hectares)
+                      <div className="gov-field">
+                        <label htmlFor="edit_area" className="gov-label">
+                          Estimated affected area (hectares) <span className="gov-required" aria-hidden="true">*</span>
                         </label>
                         <input
                           id="edit_area"
@@ -925,11 +866,11 @@ function PestCasesPageInner() {
                           step={0.01}
                           required
                           defaultValue={detail.reported_area_hectares}
-                          className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                          className="gov-input"
                         />
                       </div>
-                      <div>
-                        <label htmlFor="edit_observed_on" className="block text-sm font-medium text-slate-700">
+                      <div className="gov-field">
+                        <label htmlFor="edit_observed_on" className="gov-label">
                           Observation date (optional)
                         </label>
                         <input
@@ -937,11 +878,11 @@ function PestCasesPageInner() {
                           name="observed_on"
                           type="date"
                           defaultValue={detail.observed_on ?? ""}
-                          className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                          className="gov-input"
                         />
                       </div>
-                      <div>
-                        <label htmlFor="edit_symptoms" className="block text-sm font-medium text-slate-700">
+                      <div className="gov-field">
+                        <label htmlFor="edit_symptoms" className="gov-label">
                           Symptoms (optional)
                         </label>
                         <textarea
@@ -950,14 +891,14 @@ function PestCasesPageInner() {
                           rows={2}
                           maxLength={2000}
                           defaultValue={detail.symptoms ?? ""}
-                          className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                          className="gov-textarea"
                         />
                       </div>
-                      <div className="flex flex-wrap items-end gap-3 sm:col-span-2">
+                      <div className="gov-form-actions">
                         <button
                           type="submit"
                           disabled={savingEdit || submitting}
-                          className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                          className="gov-button gov-button-secondary"
                         >
                           {savingEdit ? "Saving..." : "Save changes"}
                         </button>
@@ -965,24 +906,24 @@ function PestCasesPageInner() {
                           type="button"
                           onClick={() => void handleSubmit(detail)}
                           disabled={savingEdit || submitting}
-                          className="rounded-lg bg-sky-700 px-4 py-2 font-medium text-white hover:bg-sky-800 disabled:cursor-wait disabled:opacity-60"
+                          className="gov-button gov-button-primary"
                         >
                           {submitting ? "Submitting..." : "Submit for inspection"}
                         </button>
                       </div>
                     </form>
                     {editError && (
-                      <p role="alert" className="mt-4 text-sm text-red-700">
+                      <p role="alert" className="gov-alert gov-alert-error mt-4">
                         {editError}
                       </p>
                     )}
                   </div>
                 ) : detail.status === "FIELD_VALIDATED" ? (
-                  <p role="status" className="mt-6 text-sm text-slate-600">
+                  <p role="status" className="gov-timeline-note mt-4">
                     This case is validated and ready for an intervention plan.{" "}
                     <Link
                       href="/interventions"
-                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                      className="gov-activity-link"
                     >
                       Go to interventions
                     </Link>
@@ -991,28 +932,28 @@ function PestCasesPageInner() {
                   detail.status === "FOLLOW_UP_DUE" ||
                   detail.status === "REINTERVENTION_REQUIRED" ||
                   detail.status === "CLOSED" ? (
-                  <p role="status" className="mt-6 text-sm text-slate-600">
+                  <p role="status" className="gov-timeline-note mt-4">
                     This case has an intervention record.{" "}
                     <Link
                       href="/interventions"
-                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                      className="gov-activity-link"
                     >
                       Go to interventions
                     </Link>{" "}
                     <Link
                       href="/follow-ups"
-                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                      className="gov-activity-link"
                     >
                       Go to follow-ups
                     </Link>
                   </p>
                 ) : (
-                  <p role="status" className="mt-6 text-sm text-slate-600">
+                  <p role="status" className="gov-timeline-note mt-4">
                     This case is queued for inspection and can no longer be edited here.
                   </p>
                 )}
                 {actionError && (
-                  <p role="alert" className="mt-4 text-sm text-red-700">
+                  <p role="alert" className="gov-alert gov-alert-error mt-4">
                     {actionError}
                   </p>
                 )}
@@ -1020,7 +961,6 @@ function PestCasesPageInner() {
             ) : null}
           </section>
         )}
-      </div>
     </main>
   );
 }

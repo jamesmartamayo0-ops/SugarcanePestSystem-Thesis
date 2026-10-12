@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+import { workflowLabel, workflowMessage } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   FollowUpsRequestError,
@@ -21,41 +22,29 @@ import {
 
 function dueBadge(state: string | null): string {
   if (state === "OVERDUE") {
-    return "bg-red-100 text-red-800";
+    return "gov-status-badge gov-status-reintervention-required";
   }
   if (state === "DUE_TODAY") {
-    return "bg-amber-100 text-amber-800";
+    return "gov-status-badge gov-status-follow-up-due";
   }
   if (state === "UPCOMING") {
-    return "bg-sky-100 text-sky-800";
+    return "gov-status-badge";
   }
-  return "bg-slate-200 text-slate-700";
+  return "gov-status-badge";
 }
 
 function outcomeBadge(outcome: string): string {
   if (outcome === "RESOLVED") {
-    return "bg-slate-800 text-white";
+    return "gov-status-badge gov-status-closed";
   }
   if (outcome === "REINTERVENTION_REQUIRED") {
-    return "bg-orange-100 text-orange-800";
+    return "gov-status-badge gov-status-reintervention-required";
   }
-  return "bg-slate-200 text-slate-700";
+  return "gov-status-badge";
 }
 
 function caseBadge(status: string): string {
-  if (status === "CLOSED") {
-    return "bg-slate-800 text-white";
-  }
-  if (status === "REINTERVENTION_REQUIRED") {
-    return "bg-orange-100 text-orange-800";
-  }
-  if (status === "FOLLOW_UP_DUE") {
-    return "bg-teal-100 text-teal-800";
-  }
-  if (status === "UNDER_INTERVENTION") {
-    return "bg-violet-100 text-violet-800";
-  }
-  return "bg-sky-100 text-sky-800";
+  return `gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`;
 }
 
 function cycleLabel(history: FollowUpDetail[], entry: FollowUpDetail): string {
@@ -67,6 +56,27 @@ function cycleLabel(history: FollowUpDetail[], entry: FollowUpDetail): string {
     return `Intervention #${entry.intervention_id}`;
   }
   return `Case #${entry.pest_case.id} — cycle ${position + 1} (intervention #${entry.intervention_id})`;
+}
+
+// Rendering only: date-only values retain their calendar day; timestamps use Manila time.
+function formatRecordDate(value: string | null): string {
+  if (value === null) {
+    return "—";
+  }
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  // Do not guess a timezone for an unqualified timestamp.
+  if (!dateOnly && !/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+    return value;
+  }
+  const parsed = new Date(dateOnly ? `${value}T00:00:00Z` : value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    ...(dateOnly ? {} : { timeStyle: "short" as const }),
+    timeZone: dateOnly ? "UTC" : "Asia/Manila",
+  }).format(parsed);
 }
 
 export default function FollowUpsPage() {
@@ -342,112 +352,102 @@ export default function FollowUpsPage() {
     selectedEntry !== undefined && canRecord(selectedEntry) ? selectedEntry : null;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">
-          Follow-up &amp; Reassessment
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">Follow-up &amp; Reassessment</h1>
+        <p className="gov-page-description">
           Record human reassessments for completed interventions. Outcomes are
           explicitly selected and never inferred. Resolved cases close; cases
           needing more work return for reintervention. History is preserved.
         </p>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
+        <div className="gov-record-controls mt-3">
           <Link
             href="/pest-cases"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View pest cases
           </Link>
           <Link
             href="/interventions"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View interventions
           </Link>
           <Link
             href="/reports"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View reports
           </Link>
         </div>
+      </header>
 
-        <section aria-label="Pending follow-up queue" className="mt-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Pending follow-up queue</h2>
+        <section aria-label="Pending follow-up queue" className="gov-card gov-record-section">
+          <div className="gov-record-toolbar">
+            <h2 className="gov-record-title">Pending follow-up queue</h2>
             <button
               type="button"
               onClick={() => void loadAll(outcomeFilter, caseFilter)}
               disabled={loading}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              className="gov-button gov-button-secondary gov-button-compact"
             >
               {loading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
           {loading ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading follow-up queue...
             </p>
           ) : listError ? (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
             </p>
           ) : due.length === 0 ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               No completed interventions are awaiting follow-up.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[860px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[860px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Case / Farm / Farmer</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Technician</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Method / Performed</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Due</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Case / Farm / Farmer</th>
+                    <th scope="col">Technician</th>
+                    <th scope="col">Method / Performed</th>
+                    <th scope="col">Due</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {due.map((entry) => {
                     const localState = dueStateFor(entry.follow_up_due_on);
                     return (
                       <tr key={entry.intervention_id}>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td>
                           #{entry.pest_case_id} — {entry.pest_case?.pest_name ?? "—"}
                           <span className="block text-xs text-slate-600">
                             {entry.pest_case?.farm?.plot_identifier ?? "—"} —{" "}
                             {entry.pest_case?.farm?.farmer?.full_name ?? "—"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td>
                           {entry.assigned_to?.full_name ?? `#${entry.assigned_to_user_id}`}
                         </td>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td>
                           {entry.method_category}
                           <span className="block text-xs text-slate-600">
                             Performed {entry.performed_on ?? "—"}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${dueBadge(localState)}`}
+                            className={dueBadge(localState)}
                           >
                             {entry.follow_up_due_on ?? "Not set"} —{" "}
                             {dueBadgeLabel(localState)}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           {canRecord(entry) ? (
                             <button
                               type="button"
@@ -458,7 +458,7 @@ export default function FollowUpsPage() {
                                 setSelectedInterventionId(entry.intervention_id);
                                 setFormError(null);
                               }}
-                              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                              className="gov-button gov-button-secondary gov-button-compact"
                             >
                               {selectedInterventionId === entry.intervention_id
                                 ? "Selected"
@@ -479,34 +479,34 @@ export default function FollowUpsPage() {
           )}
         </section>
 
-        <section aria-label="Record follow-up" className="mt-10">
-          <h2 className="text-lg font-semibold text-slate-900">Record follow-up</h2>
+        <section aria-label="Record follow-up" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Record follow-up</h2>
           {activeRecordingTarget === null ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Select a pending intervention from the queue to record its reassessment.
             </p>
           ) : (
-            <form onSubmit={handleRecord} className="mt-4 grid gap-4 sm:grid-cols-2">
-              <p className="text-sm text-slate-700 sm:col-span-2">
+            <form onSubmit={handleRecord} className="gov-form gov-form-grid">
+              <p className="gov-field-help gov-field-wide">
                 Recording for intervention #{activeRecordingTarget.intervention_id}. The outcome you
                 select controls the next case status.
               </p>
-              <div>
-                <label htmlFor="observed_on" className="block text-sm font-medium text-slate-700">
-                  Observed date
+              <div className="gov-field">
+                <label htmlFor="observed_on" className="gov-label">
+                  Observed date <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="observed_on"
                   name="observed_on"
                   type="date"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  className="gov-input"
                 />
               </div>
-              <div>
-                <span className="block text-sm font-medium text-slate-700">
-                  Pest still observed
-                </span>
+              <fieldset className="gov-radio-group">
+                <legend className="gov-label">
+                  Pest still observed <span className="gov-required" aria-hidden="true">*</span>
+                </legend>
                 <div className="mt-2 flex gap-4">
                   <label className="inline-flex items-center gap-2 text-sm text-slate-700">
                     <input type="radio" name="pest_observed" value="yes" required className="h-4 w-4" />
@@ -517,9 +517,9 @@ export default function FollowUpsPage() {
                     No
                   </label>
                 </div>
-              </div>
-              <div>
-                <label htmlFor="observed_affected_area_hectares" className="block text-sm font-medium text-slate-700">
+              </fieldset>
+              <div className="gov-field">
+                <label htmlFor="observed_affected_area_hectares" className="gov-label">
                   Observed affected area (hectares, optional)
                 </label>
                 <input
@@ -530,11 +530,11 @@ export default function FollowUpsPage() {
                   max={10000}
                   step={0.01}
                   placeholder="e.g. 0.50"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  className="gov-input"
                 />
               </div>
-              <div>
-                <span className="block text-sm font-medium text-slate-700">Outcome (required)</span>
+              <fieldset className="gov-radio-group">
+                <legend className="gov-label">Outcome (required) <span className="gov-required" aria-hidden="true">*</span></legend>
                 <div className="mt-2 grid gap-2">
                   <label className="inline-flex items-start gap-2 text-sm text-slate-700">
                     <input type="radio" name="outcome" value="RESOLVED" required className="mt-1 h-4 w-4" />
@@ -545,10 +545,10 @@ export default function FollowUpsPage() {
                     Further intervention required
                   </label>
                 </div>
-              </div>
-              <div className="sm:col-span-2">
-                <label htmlFor="assessment_notes" className="block text-sm font-medium text-slate-700">
-                  Assessment notes
+              </fieldset>
+              <div className="gov-field gov-field-wide">
+                <label htmlFor="assessment_notes" className="gov-label">
+                  Assessment notes <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <textarea
                   id="assessment_notes"
@@ -557,14 +557,14 @@ export default function FollowUpsPage() {
                   maxLength={2000}
                   required
                   placeholder="e.g. No fresh boring observed on east rows; canopy recovering"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  className="gov-textarea"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="gov-form-actions">
                 <button
                   type="submit"
                   disabled={recording}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                  className="gov-button gov-button-primary"
                 >
                   {recording ? "Recording..." : "Record follow-up"}
                 </button>
@@ -572,22 +572,22 @@ export default function FollowUpsPage() {
             </form>
           )}
           {formError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {formError}
             </p>
           )}
           {notice && (
-            <p role="status" className="mt-4 text-sm text-emerald-700">
-              {notice}
+            <p role="status" className="gov-alert gov-alert-success mt-4">
+              {workflowMessage(notice)}
             </p>
           )}
         </section>
 
-        <section aria-label="Follow-up history" className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Follow-up history</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <label htmlFor="follow_case_filter" className="text-sm font-medium text-slate-700">
+        <section aria-label="Follow-up history" className="gov-card gov-record-section">
+          <div className="gov-record-toolbar">
+            <h2 className="gov-record-title">Follow-up history</h2>
+            <div className="gov-record-controls">
+              <label htmlFor="follow_case_filter" className="gov-label">
                 Case
               </label>
               <input
@@ -599,9 +599,9 @@ export default function FollowUpsPage() {
                 }}
                 placeholder="All"
                 inputMode="numeric"
-                className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-input w-24"
               />
-              <label htmlFor="follow_outcome_filter" className="text-sm font-medium text-slate-700">
+              <label htmlFor="follow_outcome_filter" className="gov-label">
                 Outcome
               </label>
               <select
@@ -612,55 +612,55 @@ export default function FollowUpsPage() {
                   setOutcomeFilter(next);
                   void loadAll(next, caseFilter);
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-select"
               >
                 <option value="all">All outcomes</option>
-                <option value="RESOLVED">RESOLVED</option>
-                <option value="REINTERVENTION_REQUIRED">REINTERVENTION_REQUIRED</option>
+                <option value="RESOLVED">{workflowLabel("RESOLVED")}</option>
+                <option value="REINTERVENTION_REQUIRED">{workflowLabel("REINTERVENTION_REQUIRED")}</option>
               </select>
               <button
                 type="button"
                 onClick={() => void loadAll(outcomeFilter, caseFilter)}
                 disabled={loading}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-secondary gov-button-compact"
               >
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
           {loading ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading follow-up history...
             </p>
           ) : history.length === 0 ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               No recorded reassessments found.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[860px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[860px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Follow-up</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Observation</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Outcome / Case</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Follow-up</th>
+                    <th scope="col">Observation</th>
+                    <th scope="col">Outcome / Case</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {history.map((entry) => (
                     <tr key={entry.id}>
-                      <td className="px-4 py-3 text-slate-900">
+                      <td>
                         #{entry.id} — {cycleLabel(history, entry)}
                         <span className="block text-xs text-slate-600">
-                          Recorded {entry.created_at ?? "—"} by{" "}
+                          Recorded {formatRecordDate(entry.created_at ?? null)} by{" "}
                           {entry.recorded_by?.full_name ?? `#${entry.recorded_by_user_id}`}
                         </span>
                         <span className="mt-1 block text-xs text-slate-600">
                           {entry.assessment_notes}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-900">
+                      <td>
                         {entry.pest_observed ? "Pest seen" : "No pest seen"} —{" "}
                         {entry.observed_on}
                         <span className="block text-xs text-slate-600">
@@ -670,23 +670,23 @@ export default function FollowUpsPage() {
                             : `${entry.observed_affected_area_hectares.toFixed(2)} ha`}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${outcomeBadge(entry.outcome)}`}
+                          className={outcomeBadge(entry.outcome)}
                         >
-                          {entry.outcome}
+                          {workflowLabel(entry.outcome)}
                         </span>
                         <span
-                          className={`ml-2 rounded-full px-3 py-1 text-xs font-semibold ${caseBadge(entry.pest_case?.status ?? "")}`}
+                          className={`ml-2 ${caseBadge(entry.pest_case?.status ?? "")}`}
                         >
-                          {entry.pest_case?.status ?? "—"}
+                          {workflowLabel(entry.pest_case?.status ?? "—")}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <button
                           type="button"
                           onClick={() => void openDetail(entry.id)}
-                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          className="gov-button gov-button-secondary gov-button-compact"
                         >
                           {selectedFollowUpId === entry.id ? "Selected" : "View"}
                         </button>
@@ -702,57 +702,57 @@ export default function FollowUpsPage() {
         {selectedFollowUpId !== null && (
           <section
             aria-label="Follow-up detail"
-            className="mt-8 rounded-xl border border-slate-200 p-6"
+            className="gov-card gov-record-section"
           >
             {loadingDetail ? (
-              <p role="status" className="text-sm text-slate-600">
+              <p role="status" className="gov-empty-state">
                 Loading follow-up details...
               </p>
             ) : detailError ? (
-              <p role="alert" className="text-sm text-red-700">
+              <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}
               </p>
             ) : detail ? (
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">
+                <div className="gov-record-toolbar">
+                  <h2 className="gov-record-title">
                     Follow-up #{detail.id} — {detail.pest_case?.pest_name ?? "—"}
                   </h2>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${outcomeBadge(detail.outcome)}`}
+                    className={outcomeBadge(detail.outcome)}
                   >
-                    {detail.outcome}
+                    {workflowLabel(detail.outcome)}
                   </span>
                 </div>
-                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <dl className="gov-detail-grid">
                   <div>
-                    <dt className="font-medium text-slate-600">Intervention cycle</dt>
-                    <dd className="text-slate-900">{cycleLabel(history, detail)}</dd>
+                    <dt className="gov-detail-label">Intervention cycle</dt>
+                    <dd className="gov-detail-value">{cycleLabel(history, detail)}</dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Case status</dt>
-                    <dd className="text-slate-900">{detail.pest_case?.status ?? "—"}</dd>
+                    <dt className="gov-detail-label">Case status</dt>
+                    <dd className="gov-detail-value">{workflowLabel(detail.pest_case?.status ?? "—")}</dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Observation</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Observation</dt>
+                    <dd className="gov-detail-value">
                       {detail.pest_observed ? "Pest observed" : "No pest observed"} on{" "}
                       {detail.observed_on}
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Recorded by</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Recorded by</dt>
+                    <dd className="gov-detail-value">
                       {detail.recorded_by?.full_name ?? `#${detail.recorded_by_user_id}`} on{" "}
-                      {detail.created_at ?? "—"}
+                      {formatRecordDate(detail.created_at ?? null)}
                     </dd>
                   </div>
-                  <div className="sm:col-span-2">
-                    <dt className="font-medium text-slate-600">Assessment notes</dt>
-                    <dd className="text-slate-900">{detail.assessment_notes}</dd>
+                  <div className="gov-detail-wide">
+                    <dt className="gov-detail-label">Assessment notes</dt>
+                    <dd className="gov-detail-value">{detail.assessment_notes}</dd>
                   </div>
                 </dl>
-                <p role="status" className="mt-6 text-sm text-slate-600">
+                <p role="status" className="gov-timeline-note">
                   Recorded reassessments are read-only history and cannot be edited or
                   deleted in this phase.
                 </p>
@@ -760,7 +760,6 @@ export default function FollowUpsPage() {
             ) : null}
           </section>
         )}
-      </div>
     </main>
   );
 }

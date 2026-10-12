@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -242,36 +241,20 @@ export default function FarmersPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">Farmers</h1>
+        <p className="gov-page-description">
+          Manage farmer records used in sugarcane pest case reporting.
         </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">Farmer Management</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          View, add, and edit sugarcane farmer records. Farms are managed per farmer.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
-          <Link
-            href="/farms"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View farms
-          </Link>
-        </div>
+      </header>
 
-        <section aria-label="Add farmer" className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900">Add farmer</h2>
-          <form onSubmit={handleCreate} className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="full_name" className="block text-sm font-medium text-slate-700">
-                Full name
+        <section aria-label="Add farmer" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Add farmer</h2>
+          <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+            <div className="gov-field">
+              <label htmlFor="full_name" className="gov-label">
+                Full name <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="full_name"
@@ -280,12 +263,12 @@ export default function FarmersPage() {
                 autoComplete="off"
                 maxLength={160}
                 required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="barangay" className="block text-sm font-medium text-slate-700">
-                Barangay
+            <div className="gov-field">
+              <label htmlFor="barangay" className="gov-label">
+                Barangay <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="barangay"
@@ -294,11 +277,11 @@ export default function FarmersPage() {
                 autoComplete="off"
                 maxLength={120}
                 required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="contact_number" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="contact_number" className="gov-label">
                 Contact number (optional)
               </label>
               <input
@@ -308,82 +291,82 @@ export default function FarmersPage() {
                 autoComplete="off"
                 maxLength={32}
                 placeholder="e.g. 09171234567"
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
-            <div className="flex items-end">
+            <div className="gov-form-actions">
               <button
                 type="submit"
                 disabled={creating}
-                className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-primary"
               >
                 {creating ? "Adding..." : "Add farmer"}
               </button>
             </div>
           </form>
           {formError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {formError}
             </p>
           )}
           {formNotice && (
-            <p role="status" className="mt-4 text-sm text-emerald-700">
+            <p role="status" className="gov-alert gov-alert-success mt-4">
               {formNotice}
             </p>
           )}
         </section>
 
-        <section aria-label="Farmer records" className="mt-10">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Farmer records</h2>
+        <section aria-label="Farmer records" className="gov-card gov-record-section">
+          <div className="gov-record-toolbar">
+            <h2 className="gov-record-title">Farmer records</h2>
             <button
               type="button"
               onClick={() => void refresh()}
               disabled={loadingList}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              className="gov-button gov-button-secondary gov-button-compact"
             >
               {loadingList ? "Refreshing..." : "Refresh"}
             </button>
           </div>
           {loadingList ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading farmers...
             </p>
           ) : listError ? (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
             </p>
           ) : farmers.length === 0 ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               No farmers recorded yet. Add the first farmer above.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[640px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Full name</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Barangay</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Contact</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Farms</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Full name</th>
+                    <th scope="col">Barangay</th>
+                    <th scope="col">Contact</th>
+                    <th scope="col">Farms</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {farmers.map((entry) => (
                     <tr key={entry.id}>
-                      <td className="px-4 py-3 text-slate-900">{entry.full_name}</td>
-                      <td className="px-4 py-3 text-slate-900">{entry.barangay}</td>
-                      <td className="px-4 py-3 text-slate-900">{entry.contact_number ?? "—"}</td>
-                      <td className="px-4 py-3 text-slate-900">{entry.farm_count}</td>
-                      <td className="px-4 py-3">
+                      <td>{entry.full_name}</td>
+                      <td>{entry.barangay}</td>
+                      <td>{entry.contact_number ?? "—"}</td>
+                      <td>{entry.farm_count}</td>
+                      <td>
                         <button
                           type="button"
                           onClick={() => {
                             setEditingId(editingId === entry.id ? null : entry.id);
                             setEditError(null);
                           }}
-                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          className="gov-button gov-button-secondary gov-button-compact"
                         >
                           {editingId === entry.id ? "Cancel" : "Edit"}
                         </button>
@@ -403,17 +386,17 @@ export default function FarmersPage() {
               return null;
             }
             return (
-              <section aria-label="Edit farmer" className="mt-8 rounded-xl border border-slate-200 p-6">
-                <h2 className="text-lg font-semibold text-slate-900">
+              <section aria-label="Edit farmer" className="gov-card gov-record-section">
+                <h2 className="gov-record-title">
                   Edit farmer: {target.full_name}
                 </h2>
                 <form
                   onSubmit={(event) => void handleEdit(event, target)}
-                  className="mt-4 grid gap-4 sm:grid-cols-2"
+                  className="gov-form gov-form-grid"
                 >
-                  <div>
-                    <label htmlFor="edit_full_name" className="block text-sm font-medium text-slate-700">
-                      Full name
+                  <div className="gov-field">
+                    <label htmlFor="edit_full_name" className="gov-label">
+                      Full name <span className="gov-required" aria-hidden="true">*</span>
                     </label>
                     <input
                       id="edit_full_name"
@@ -423,12 +406,12 @@ export default function FarmersPage() {
                       maxLength={160}
                       required
                       defaultValue={target.full_name}
-                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                      className="gov-input"
                     />
                   </div>
-                  <div>
-                    <label htmlFor="edit_barangay" className="block text-sm font-medium text-slate-700">
-                      Barangay
+                  <div className="gov-field">
+                    <label htmlFor="edit_barangay" className="gov-label">
+                      Barangay <span className="gov-required" aria-hidden="true">*</span>
                     </label>
                     <input
                       id="edit_barangay"
@@ -438,11 +421,11 @@ export default function FarmersPage() {
                       maxLength={120}
                       required
                       defaultValue={target.barangay}
-                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                      className="gov-input"
                     />
                   </div>
-                  <div>
-                    <label htmlFor="edit_contact_number" className="block text-sm font-medium text-slate-700">
+                  <div className="gov-field">
+                    <label htmlFor="edit_contact_number" className="gov-label">
                       Contact number (optional)
                     </label>
                     <input
@@ -452,28 +435,27 @@ export default function FarmersPage() {
                       autoComplete="off"
                       maxLength={32}
                       defaultValue={target.contact_number ?? ""}
-                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                      className="gov-input"
                     />
                   </div>
-                  <div className="flex items-end">
+                  <div className="gov-form-actions">
                     <button
                       type="submit"
                       disabled={savingEdit}
-                      className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                      className="gov-button gov-button-primary"
                     >
                       {savingEdit ? "Saving..." : "Save changes"}
                     </button>
                   </div>
                 </form>
                 {editError && (
-                  <p role="alert" className="mt-4 text-sm text-red-700">
+                  <p role="alert" className="gov-alert gov-alert-error mt-4">
                     {editError}
                   </p>
                 )}
               </section>
             );
           })()}
-      </div>
     </main>
   );
 }

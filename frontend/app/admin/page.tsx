@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+import { roleDisplayName } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import {
   UsersRequestError,
@@ -207,29 +207,18 @@ export default function AdminPage() {
   const selfId = auth.user.id;
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">Admin Management</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          View staff accounts, create ADMIN or TECHNICIAN accounts, and activate or
-          deactivate accounts.
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-4 inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-        >
-          Back to dashboard
-        </Link>
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">User Management</h1>
+        <p className="gov-page-description">Manage authorized personnel accounts and system access.</p>
+      </header>
 
-        <section aria-label="Create staff account" className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900">Create staff account</h2>
-          <form onSubmit={handleCreate} className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700">
-                Username
+        <section aria-label="Create staff account" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Create staff account</h2>
+          <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+            <div className="gov-field">
+              <label htmlFor="username" className="gov-label">
+                Username <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="username"
@@ -238,12 +227,12 @@ export default function AdminPage() {
                 autoComplete="off"
                 maxLength={128}
                 required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="full_name" className="block text-sm font-medium text-slate-700">
-                Full name
+            <div className="gov-field">
+              <label htmlFor="full_name" className="gov-label">
+                Full name <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="full_name"
@@ -252,12 +241,12 @@ export default function AdminPage() {
                 autoComplete="off"
                 maxLength={160}
                 required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                Password (at least 12 characters)
+            <div className="gov-field">
+              <label htmlFor="password" className="gov-label">
+                Password (at least 12 characters) <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="password"
@@ -267,105 +256,103 @@ export default function AdminPage() {
                 maxLength={1024}
                 minLength={12}
                 required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-slate-700">
+            <div className="gov-field">
+              <label htmlFor="role" className="gov-label">
                 Role
               </label>
               <select
                 id="role"
                 name="role"
                 defaultValue="TECHNICIAN"
-                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-select"
               >
-                <option value="TECHNICIAN">TECHNICIAN</option>
-                <option value="ADMIN">ADMIN</option>
+                <option value="TECHNICIAN">Field Technician</option>
+                <option value="ADMIN">Administrator</option>
               </select>
             </div>
-            <div className="sm:col-span-2">
+            <div className="gov-form-actions">
               <button
                 type="submit"
                 disabled={creating}
-                className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-primary"
               >
                 {creating ? "Creating..." : "Create account"}
               </button>
             </div>
           </form>
           {formError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error gov-feedback">
               {formError}
             </p>
           )}
           {formNotice && (
-            <p role="status" className="mt-4 text-sm text-emerald-700">
+            <p role="status" className="gov-alert gov-alert-success gov-feedback">
               {formNotice}
             </p>
           )}
         </section>
 
-        <section aria-label="Staff accounts" className="mt-10">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Staff accounts</h2>
+        <section aria-label="Staff accounts" className="gov-card gov-record-section">
+          <div className="gov-record-toolbar">
+            <h2 className="gov-record-title">Staff accounts</h2>
             <button
               type="button"
               onClick={() => void refresh()}
               disabled={loadingList}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              className="gov-button gov-button-secondary gov-button-compact"
             >
               {loadingList ? "Refreshing..." : "Refresh"}
             </button>
           </div>
           {loadingList ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading staff accounts...
             </p>
           ) : listError ? (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error gov-feedback">
               {listError}
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[640px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Username</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Full name</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Role</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Username</th>
+                    <th scope="col">Full name</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {users.map((entry) => {
                     const isSelf = entry.id === selfId;
                     const busy = togglingId === entry.id;
                     return (
                       <tr key={entry.id}>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td>
                           {entry.username}
                           {isSelf && (
-                            <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-700">
+                            <span className="gov-status-badge ml-2">
                               You
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-slate-900">{entry.full_name}</td>
-                        <td className="px-4 py-3 text-slate-900">{entry.role}</td>
-                        <td className="px-4 py-3">
+                        <td>{entry.full_name}</td>
+                        <td><span className="gov-status-badge">{roleDisplayName(entry.role)}</span></td>
+                        <td>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              entry.is_active
-                                ? "bg-emerald-100 text-emerald-800"
-                                : "bg-slate-200 text-slate-700"
-                            }`}
+                            className={entry.is_active
+                                ? "gov-status-badge gov-status-closed"
+                                : "gov-status-badge gov-status-not-confirmed"}
                           >
                             {entry.is_active ? "Active" : "Inactive"}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <button
                             type="button"
                             onClick={() => void handleToggle(entry)}
@@ -377,7 +364,7 @@ export default function AdminPage() {
                                   ? `Deactivate ${entry.username}`
                                   : `Activate ${entry.username}`
                             }
-                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="gov-button gov-button-secondary gov-button-compact"
                           >
                             {busy
                               ? "Saving..."
@@ -385,6 +372,7 @@ export default function AdminPage() {
                                 ? "Deactivate"
                                 : "Activate"}
                           </button>
+                          {isSelf && <p className="gov-field-help">Your own account cannot be deactivated here.</p>}
                         </td>
                       </tr>
                     );
@@ -394,12 +382,11 @@ export default function AdminPage() {
             </div>
           )}
           {actionError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error gov-feedback">
               {actionError}
             </p>
           )}
         </section>
-      </div>
     </main>
   );
 }

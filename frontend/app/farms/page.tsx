@@ -270,57 +270,38 @@ export default function FarmsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">Farms</h1>
+        <p className="gov-page-description">
+          Manage registered sugarcane farm and plot records.
         </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">Farm Management</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          View, add, and edit sugarcane farm plots and their assigned farmers.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
-          <Link
-            href="/farmers"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View farmers
-          </Link>
-          <Link
-            href="/pest-cases"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Report pest case
-          </Link>
-        </div>
+        <Link href="/pest-cases" className="gov-button gov-button-secondary mt-3">
+          Report pest case
+        </Link>
+      </header>
 
-        <section aria-label="Add farm" className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900">Add farm</h2>
+        <section aria-label="Add farm" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Add farm</h2>
           {farmers.length === 0 && !loadingList ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Add a farmer first before recording a farm.{" "}
-              <Link href="/farmers" className="font-medium text-emerald-700 hover:text-emerald-800">
+              <Link href="/farmers" className="gov-activity-link">
                 Go to farmers
               </Link>
             </p>
           ) : (
-            <form onSubmit={handleCreate} className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="farmer_id" className="block text-sm font-medium text-slate-700">
-                  Farmer
+            <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+              <div className="gov-field">
+                <label htmlFor="farmer_id" className="gov-label">
+                  Farmer <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="farmer_id"
                   name="farmer_id"
                   required
                   defaultValue=""
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-select"
                 >
                   <option value="" disabled>
                     Select a farmer
@@ -332,9 +313,9 @@ export default function FarmsPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label htmlFor="plot_identifier" className="block text-sm font-medium text-slate-700">
-                  Farm/plot identifier
+              <div className="gov-field">
+                <label htmlFor="plot_identifier" className="gov-label">
+                  Farm/plot identifier <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="plot_identifier"
@@ -344,12 +325,12 @@ export default function FarmsPage() {
                   maxLength={120}
                   required
                   placeholder="e.g. Plot A"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-input"
                 />
               </div>
-              <div>
-                <label htmlFor="farm_barangay" className="block text-sm font-medium text-slate-700">
-                  Barangay/location
+              <div className="gov-field">
+                <label htmlFor="farm_barangay" className="gov-label">
+                  Barangay/location <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="farm_barangay"
@@ -358,12 +339,12 @@ export default function FarmsPage() {
                   autoComplete="off"
                   maxLength={120}
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-input"
                 />
               </div>
-              <div>
-                <label htmlFor="area_hectares" className="block text-sm font-medium text-slate-700">
-                  Sugarcane area (hectares)
+              <div className="gov-field">
+                <label htmlFor="area_hectares" className="gov-label">
+                  Sugarcane area (hectares) <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="area_hectares"
@@ -374,14 +355,14 @@ export default function FarmsPage() {
                   step={0.01}
                   required
                   placeholder="e.g. 2.50"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                  className="gov-input"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="gov-form-actions">
                 <button
                   type="submit"
                   disabled={creating}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                  className="gov-button gov-button-primary"
                 >
                   {creating ? "Adding..." : "Add farm"}
                 </button>
@@ -389,22 +370,22 @@ export default function FarmsPage() {
             </form>
           )}
           {formError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {formError}
             </p>
           )}
           {formNotice && (
-            <p role="status" className="mt-4 text-sm text-emerald-700">
+            <p role="status" className="gov-alert gov-alert-success mt-4">
               {formNotice}
             </p>
           )}
         </section>
 
-        <section aria-label="Farm records" className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Farm records</h2>
-            <div className="flex items-center gap-2">
-              <label htmlFor="filter_farmer" className="text-sm font-medium text-slate-700">
+        <section aria-label="Farm records" className="gov-card gov-record-section">
+          <div className="gov-record-toolbar">
+            <h2 className="gov-record-title">Farm records</h2>
+            <div className="gov-record-controls">
+              <label htmlFor="filter_farmer" className="gov-label">
                 Farmer
               </label>
               <select
@@ -415,7 +396,7 @@ export default function FarmsPage() {
                   setFilterFarmerId(next);
                   void loadAll(next);
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-select"
               >
                 <option value="all">All farmers</option>
                 {farmers.map((entry) => (
@@ -428,58 +409,58 @@ export default function FarmsPage() {
                 type="button"
                 onClick={() => void loadAll(filterFarmerId)}
                 disabled={loadingList}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-secondary gov-button-compact"
               >
                 {loadingList ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
           {loadingList ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading farms...
             </p>
           ) : listError ? (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
             </p>
           ) : farms.length === 0 ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               No farm records found. Add the first farm above.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[720px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Farm/plot</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Barangay</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Area (ha)</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Farmer</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Farm/plot</th>
+                    <th scope="col">Barangay</th>
+                    <th scope="col">Area (ha)</th>
+                    <th scope="col">Farmer</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {farms.map((entry) => (
                     <tr key={entry.id}>
-                      <td className="px-4 py-3 text-slate-900">{entry.plot_identifier}</td>
-                      <td className="px-4 py-3 text-slate-900">{entry.barangay}</td>
-                      <td className="px-4 py-3 text-slate-900">{entry.area_hectares.toFixed(2)}</td>
-                      <td className="px-4 py-3 text-slate-900">{entry.farmer.full_name}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
+                      <td>{entry.plot_identifier}</td>
+                      <td>{entry.barangay}</td>
+                      <td>{entry.area_hectares.toFixed(2)}</td>
+                      <td>{entry.farmer.full_name}</td>
+                      <td>
+                        <div className="gov-table-actions">
                           <button
                             type="button"
                             onClick={() => {
                               setEditingId(editingId === entry.id ? null : entry.id);
                               setEditError(null);
                             }}
-                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            className="gov-button gov-button-secondary gov-button-compact"
                           >
                             {editingId === entry.id ? "Cancel" : "Edit"}
                           </button>
                           <Link
                             href={`/pest-cases?farm_id=${entry.id}`}
-                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            className="gov-button gov-button-secondary gov-button-compact"
                           >
                             Report case
                           </Link>
@@ -500,20 +481,20 @@ export default function FarmsPage() {
               return null;
             }
             return (
-              <section aria-label="Edit farm" className="mt-8 rounded-xl border border-slate-200 p-6">
-                <h2 className="text-lg font-semibold text-slate-900">
+              <section aria-label="Edit farm" className="gov-card gov-record-section">
+                <h2 className="gov-record-title">
                   Edit farm: {target.plot_identifier}
                 </h2>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="gov-field-help">
                   Farmer: {target.farmer.full_name} (farm ownership cannot be changed here)
                 </p>
                 <form
                   onSubmit={(event) => void handleEdit(event, target)}
-                  className="mt-4 grid gap-4 sm:grid-cols-2"
+                  className="gov-form gov-form-grid"
                 >
-                  <div>
-                    <label htmlFor="edit_plot_identifier" className="block text-sm font-medium text-slate-700">
-                      Farm/plot identifier
+                  <div className="gov-field">
+                    <label htmlFor="edit_plot_identifier" className="gov-label">
+                      Farm/plot identifier <span className="gov-required" aria-hidden="true">*</span>
                     </label>
                     <input
                       id="edit_plot_identifier"
@@ -523,12 +504,12 @@ export default function FarmsPage() {
                       maxLength={120}
                       required
                       defaultValue={target.plot_identifier}
-                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                      className="gov-input"
                     />
                   </div>
-                  <div>
-                    <label htmlFor="edit_farm_barangay" className="block text-sm font-medium text-slate-700">
-                      Barangay/location
+                  <div className="gov-field">
+                    <label htmlFor="edit_farm_barangay" className="gov-label">
+                      Barangay/location <span className="gov-required" aria-hidden="true">*</span>
                     </label>
                     <input
                       id="edit_farm_barangay"
@@ -538,12 +519,12 @@ export default function FarmsPage() {
                       maxLength={120}
                       required
                       defaultValue={target.barangay}
-                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                      className="gov-input"
                     />
                   </div>
-                  <div>
-                    <label htmlFor="edit_area_hectares" className="block text-sm font-medium text-slate-700">
-                      Sugarcane area (hectares)
+                  <div className="gov-field">
+                    <label htmlFor="edit_area_hectares" className="gov-label">
+                      Sugarcane area (hectares) <span className="gov-required" aria-hidden="true">*</span>
                     </label>
                     <input
                       id="edit_area_hectares"
@@ -554,28 +535,27 @@ export default function FarmsPage() {
                       step={0.01}
                       required
                       defaultValue={target.area_hectares}
-                      className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                      className="gov-input"
                     />
                   </div>
-                  <div className="flex items-end">
+                  <div className="gov-form-actions">
                     <button
                       type="submit"
                       disabled={savingEdit}
-                      className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                      className="gov-button gov-button-primary"
                     >
                       {savingEdit ? "Saving..." : "Save changes"}
                     </button>
                   </div>
                 </form>
                 {editError && (
-                  <p role="alert" className="mt-4 text-sm text-red-700">
+                  <p role="alert" className="gov-alert gov-alert-error mt-4">
                     {editError}
                   </p>
                 )}
               </section>
             );
           })()}
-      </div>
     </main>
   );
 }

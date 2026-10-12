@@ -54,25 +54,25 @@ export default function LoginPage() {
   const redirecting = auth.status === "authenticated";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
-        </p>
-        <h1 className="mt-4 text-2xl font-semibold text-slate-900">Sign in</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Sugarcane Pest Inspection and Intervention Workflow Management System
-        </p>
+    <main className="gov-login">
+      <div className="gov-card gov-login-panel">
+        <header className="gov-login-identity">
+          <p className="gov-login-office">Bais City Agriculturist&apos;s Office</p>
+          <p className="gov-page-description">
+            Sugarcane Pest Inspection and Intervention Workflow Management System
+          </p>
+        </header>
+        <h1 className="gov-page-title">Sign in</h1>
 
         {checking || redirecting ? (
-          <p role="status" className="mt-8 text-sm text-slate-600">
+          <p role="status" className="gov-empty-state">
             {checking ? "Checking your session..." : "Opening dashboard..."}
           </p>
         ) : (
-          <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-slate-700">
-                Username
+          <form onSubmit={handleSubmit} className="gov-form gov-login-form">
+            <div className="gov-field">
+              <label htmlFor="username" className="gov-label">
+                Username <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="username"
@@ -81,12 +81,12 @@ export default function LoginPage() {
                 autoComplete="username"
                 maxLength={128}
                 required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700">
-                Password
+            <div className="gov-field">
+              <label htmlFor="password" className="gov-label">
+                Password <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="password"
@@ -95,28 +95,29 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 maxLength={1024}
                 required
-                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 focus:border-emerald-700 focus:outline-2 focus:outline-emerald-700"
+                className="gov-input"
               />
             </div>
             {auth.status === "error" && !error && (
-              <p role="alert" className="text-sm text-amber-700">
+              <p role="alert" className="gov-alert gov-alert-warning">
                 Authentication service is unavailable. Try again shortly.
               </p>
             )}
             {error && (
-              <p role="alert" className="text-sm text-red-700">
+              <p role="alert" className="gov-alert gov-alert-error">
                 {error}
               </p>
             )}
             <button
               type="submit"
               disabled={submitting}
-              className="w-full rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+              className="gov-button gov-button-primary"
             >
               {submitting ? "Signing in..." : "Sign in"}
             </button>
           </form>
         )}
+        <p className="gov-field-help">Authorized personnel only.</p>
       </div>
     </main>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import { workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   TimelineRequestError,
@@ -12,19 +13,28 @@ import {
 } from "@/lib/timeline";
 
 function categoryBadge(category: string): string {
-  if (category === "CASE") {
-    return "bg-amber-100 text-amber-800";
+  return `gov-event-label gov-event-${category.toLowerCase().replaceAll("_", "-")}`;
+}
+
+// Rendering only: date-only values retain their calendar day; timestamps use Manila time.
+function formatTimelineDate(value: string | null): string {
+  if (value === null) {
+    return "—";
   }
-  if (category === "INSPECTION") {
-    return "bg-violet-100 text-violet-800";
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  // Do not guess a timezone for an unqualified timestamp.
+  if (!dateOnly && !/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+    return value;
   }
-  if (category === "INTERVENTION") {
-    return "bg-sky-100 text-sky-800";
+  const parsed = new Date(dateOnly ? `${value}T00:00:00Z` : value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
   }
-  if (category === "FOLLOW_UP") {
-    return "bg-teal-100 text-teal-800";
-  }
-  return "bg-slate-800 text-white";
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    ...(dateOnly ? {} : { timeStyle: "short" as const }),
+    timeZone: dateOnly ? "UTC" : "Asia/Manila",
+  }).format(parsed);
 }
 
 export default function PestCaseTimelinePage() {
@@ -114,113 +124,104 @@ export default function PestCaseTimelinePage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">Case Timeline</h1>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/pest-cases"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to pest cases
-          </Link>
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
-        </div>
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <Link href="/pest-cases" className="gov-activity-link">
+          Back to pest cases
+        </Link>
+        <h1 className="gov-page-title mt-3">Case Timeline</h1>
+      </header>
 
         {validId === null ? (
-          <p role="alert" className="mt-6 text-sm text-red-700">
+          <p role="alert" className="gov-alert gov-alert-error">
             Invalid pest case reference.
           </p>
         ) : loading ? (
-          <p role="status" className="mt-6 text-sm text-slate-600">
+          <p role="status" className="gov-empty-state">
             Loading case timeline...
           </p>
         ) : error ? (
-          <p role="alert" className="mt-6 text-sm text-red-700">
+          <p role="alert" className="gov-alert gov-alert-error">
             {error}
           </p>
         ) : data ? (
           <div>
-            <section aria-label="Case summary" className="mt-6 rounded-xl border border-slate-200 p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold text-slate-900">
-                  #{data.pest_case.id} — {data.pest_case.pest_name}
+            <section aria-label="Case summary" className="gov-card gov-record-section">
+              <div className="gov-record-toolbar">
+                <h2 className="gov-record-title">
+                  Case #{data.pest_case.id} — {data.pest_case.pest_name}
                 </h2>
-                <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold text-sky-800">
-                  {data.pest_case.status}
+                <span className={`gov-status-badge gov-status-${data.pest_case.status.toLowerCase().replaceAll("_", "-")}`}>
+                  {workflowLabel(data.pest_case.status)}
                 </span>
               </div>
-              <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <dl className="gov-detail-grid">
                 <div>
-                  <dt className="font-medium text-slate-600">Farmer</dt>
-                  <dd className="text-slate-900">
+                  <dt className="gov-detail-label">Farmer</dt>
+                  <dd className="gov-detail-value">
                     {data.pest_case.farm.farmer.full_name} —{" "}
                     {data.pest_case.farm.farmer.barangay}
                   </dd>
                 </div>
                 <div>
-                  <dt className="font-medium text-slate-600">Farm</dt>
-                  <dd className="text-slate-900">
+                  <dt className="gov-detail-label">Farm</dt>
+                  <dd className="gov-detail-value">
                     {data.pest_case.farm.plot_identifier} — {data.pest_case.farm.barangay} (
                     {data.pest_case.farm.area_hectares.toFixed(2)} ha)
                   </dd>
                 </div>
                 <div>
-                  <dt className="font-medium text-slate-600">Reported</dt>
-                  <dd className="text-slate-900">{data.pest_case.reported_at ?? "—"}</dd>
+                  <dt className="gov-detail-label">Reported</dt>
+                  <dd className="gov-detail-value">{formatTimelineDate(data.pest_case.reported_at)}</dd>
                 </div>
                 <div>
-                  <dt className="font-medium text-slate-600">Symptoms</dt>
-                  <dd className="text-slate-900">{data.pest_case.symptoms ?? "—"}</dd>
+                  <dt className="gov-detail-label">Reported affected area</dt>
+                  <dd className="gov-detail-value">{data.pest_case.reported_area_hectares.toFixed(2)} ha</dd>
+                </div>
+                <div>
+                  <dt className="gov-detail-label">Symptoms</dt>
+                  <dd className="gov-detail-value">{data.pest_case.symptoms ?? "—"}</dd>
                 </div>
               </dl>
             </section>
 
-            <section aria-label="Chronological timeline" className="mt-8">
-              <h2 className="text-lg font-semibold text-slate-900">
+            <section aria-label="Chronological timeline" className="gov-card gov-record-section">
+              <h2 className="gov-record-title">
                 Chronological timeline
               </h2>
-              <p className="mt-2 text-xs text-slate-500">
+              <p className="gov-timeline-note">
                 Assembled from stored case, inspection, intervention, and follow-up
                 records. Reschedule history is not stored, so only the current
                 inspection schedule is shown.
               </p>
               {data.timeline.length === 0 ? (
-                <p role="status" className="mt-4 text-sm text-slate-600">
+                <p role="status" className="gov-empty-state">
                   No timeline events found.
                 </p>
               ) : (
-                <ol className="mt-4 space-y-4">
+                <ol className="gov-timeline">
                   {data.timeline.map((event, index) => (
                     <li
                       key={`${event.event_type}-${index}`}
-                      className="rounded-xl border border-slate-200 p-4"
+                      className="gov-timeline-item"
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="gov-timeline-meta">
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${categoryBadge(event.category)}`}
+                          className={categoryBadge(event.category)}
                         >
                           {event.category}
                           {event.cycle !== null ? ` · Cycle ${event.cycle}` : ""}
                         </span>
-                        <span className="text-xs text-slate-500">
-                          {event.occurred_at ?? event.event_date ?? "—"}
+                        <span className="gov-timeline-date">
+                          {formatTimelineDate(event.occurred_at ?? event.event_date)}
                         </span>
                       </div>
-                      <h3 className="mt-2 text-sm font-semibold text-slate-900">
+                      <h3 className="gov-timeline-title">
                         {event.title}
                       </h3>
-                      <p className="mt-1 text-sm text-slate-700">{event.description}</p>
+                      <p className="gov-timeline-description">{event.description}</p>
                       {event.actor && (
-                        <p className="mt-1 text-xs text-slate-500">
+                        <p className="gov-timeline-actor">
                           By {event.actor.full_name} ({event.actor.username})
                         </p>
                       )}
@@ -231,7 +232,6 @@ export default function PestCaseTimelinePage() {
             </section>
           </div>
         ) : null}
-      </div>
     </main>
   );
 }

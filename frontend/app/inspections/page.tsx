@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+import { workflowLabel, workflowMessage } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   InspectionsRequestError,
@@ -46,31 +47,7 @@ function parseArea(raw: string, allowZero: boolean): number | null {
 }
 
 function statusBadge(status: string): string {
-  if (status === "FIELD_VALIDATED") {
-    return "bg-emerald-100 text-emerald-800";
-  }
-  if (status === "FOLLOW_UP_DUE") {
-    return "bg-teal-100 text-teal-800";
-  }
-  if (status === "UNDER_INTERVENTION") {
-    return "bg-violet-100 text-violet-800";
-  }
-  if (status === "REINTERVENTION_REQUIRED") {
-    return "bg-orange-100 text-orange-800";
-  }
-  if (status === "CLOSED") {
-    return "bg-slate-800 text-white";
-  }
-  if (status === "NOT_CONFIRMED") {
-    return "bg-slate-200 text-slate-700";
-  }
-  if (status === "INSPECTION_SCHEDULED") {
-    return "bg-violet-100 text-violet-800";
-  }
-  if (status === "FOR_INSPECTION") {
-    return "bg-sky-100 text-sky-800";
-  }
-  return "bg-amber-100 text-amber-800";
+  return `gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`;
 }
 
 function isPending(item: InspectionDetail): boolean {
@@ -454,62 +431,52 @@ export default function InspectionsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">
-          Inspection Scheduling
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">Inspections</h1>
+        <p className="gov-page-description">
           Schedule initial field inspections, reassign pending visits, and record
           validated findings. Reported area stays unchanged; validated area is the
           inspector&apos;s independent measurement.
         </p>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
+        <div className="gov-record-controls mt-3">
           <Link
             href="/pest-cases"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View pest cases
           </Link>
           <Link
             href="/reports"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View reports
           </Link>
         </div>
+      </header>
 
-        <section aria-label="Schedule inspection" className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900">Schedule inspection</h2>
+        <section aria-label="Schedule inspection" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Schedule inspection</h2>
           {eligibleCases.length === 0 && !loading ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
-              No cases are waiting for inspection scheduling. Submit a REPORTED case
+            <p role="status" className="gov-empty-state">
+              No cases are waiting for inspection scheduling. Submit a Reported case
               for inspection first.
             </p>
           ) : (
-            <form onSubmit={handleSchedule} className="mt-4 grid gap-4 sm:grid-cols-3">
-              <div>
+            <form onSubmit={handleSchedule} className="gov-form gov-form-grid">
+              <div className="gov-field">
                 <label
                   htmlFor="pest_case_id"
-                  className="block text-sm font-medium text-slate-700"
+                  className="gov-label"
                 >
-                  Eligible case
+                  Eligible case <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="pest_case_id"
                   name="pest_case_id"
                   required
                   defaultValue=""
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  className="gov-select"
                 >
                   <option value="" disabled>
                     Select a case
@@ -521,19 +488,19 @@ export default function InspectionsPage() {
                   ))}
                 </select>
               </div>
-              <div>
+              <div className="gov-field">
                 <label
                   htmlFor="assigned_to_user_id"
-                  className="block text-sm font-medium text-slate-700"
+                  className="gov-label"
                 >
-                  Assigned technician
+                  Assigned technician <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="assigned_to_user_id"
                   name="assigned_to_user_id"
                   required
                   defaultValue=""
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  className="gov-select"
                 >
                   <option value="" disabled>
                     Select a technician
@@ -545,26 +512,26 @@ export default function InspectionsPage() {
                   ))}
                 </select>
               </div>
-              <div>
+              <div className="gov-field">
                 <label
                   htmlFor="scheduled_for"
-                  className="block text-sm font-medium text-slate-700"
+                  className="gov-label"
                 >
-                  Inspection date
+                  Inspection date <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="scheduled_for"
                   name="scheduled_for"
                   type="date"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  className="gov-input"
                 />
               </div>
-              <div className="sm:col-span-3">
+              <div className="gov-form-actions">
                 <button
                   type="submit"
                   disabled={scheduling}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                  className="gov-button gov-button-primary"
                 >
                   {scheduling ? "Scheduling..." : "Schedule inspection"}
                 </button>
@@ -572,24 +539,24 @@ export default function InspectionsPage() {
             </form>
           )}
           {formError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {formError}
             </p>
           )}
           {notice && (
-            <p role="status" className="mt-4 text-sm text-emerald-700">
-              {notice}
+            <p role="status" className="gov-alert gov-alert-success mt-4">
+              {workflowMessage(notice)}
             </p>
           )}
         </section>
 
-        <section aria-label="Inspection records" className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Inspection records</h2>
-            <div className="flex flex-wrap items-center gap-2">
+        <section aria-label="Inspection records" className="gov-card gov-record-section">
+          <div className="gov-record-toolbar">
+            <h2 className="gov-record-title">Inspection records</h2>
+            <div className="gov-record-controls">
               <label
                 htmlFor="technician_filter"
-                className="text-sm font-medium text-slate-700"
+                className="gov-label"
               >
                 Technician
               </label>
@@ -601,7 +568,7 @@ export default function InspectionsPage() {
                   setTechnicianFilter(next);
                   void loadAll(next);
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-select"
               >
                 <option value="all">All technicians</option>
                 {technicians.map((tech) => (
@@ -614,64 +581,64 @@ export default function InspectionsPage() {
                 type="button"
                 onClick={() => void loadAll(technicianFilter)}
                 disabled={loading}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-secondary gov-button-compact"
               >
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
           {loading ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading inspections...
             </p>
           ) : listError ? (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
             </p>
           ) : inspections.length === 0 ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               No inspections found. Schedule the first inspection above.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[760px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Inspection</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Case / Farm / Farmer</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Technician</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Scheduled</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Inspection</th>
+                    <th scope="col">Case / Farm / Farmer</th>
+                    <th scope="col">Technician</th>
+                    <th scope="col">Scheduled</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {inspections.map((entry) => (
                     <tr key={entry.id}>
-                      <td className="px-4 py-3 text-slate-900">#{entry.id}</td>
-                      <td className="px-4 py-3 text-slate-900">
+                      <td>#{entry.id}</td>
+                      <td>
                         #{entry.pest_case_id} — {entry.pest_case.pest_name}
                         <span className="block text-xs text-slate-600">
                           {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                           {entry.pest_case.farm?.farmer?.full_name ?? "—"}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-900">
+                      <td>
                         {entry.assigned_to?.full_name ?? `#${entry.assigned_to_user_id}`}
                       </td>
-                      <td className="px-4 py-3 text-slate-900">{entry.scheduled_for}</td>
-                      <td className="px-4 py-3">
+                      <td>{entry.scheduled_for}</td>
+                      <td>
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(entry.pest_case.status)}`}
+                          className={statusBadge(entry.pest_case.status)}
                         >
-                          {entry.pest_case.status}
+                          {workflowLabel(entry.pest_case.status)}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td>
                         <button
                           type="button"
                           onClick={() => void openDetail(entry.id)}
-                          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                          className="gov-button gov-button-secondary gov-button-compact"
                         >
                           {selectedId === entry.id ? "Selected" : "View"}
                         </button>
@@ -687,91 +654,93 @@ export default function InspectionsPage() {
         {selectedId !== null && (
           <section
             aria-label="Inspection detail"
-            className="mt-8 rounded-xl border border-slate-200 p-6"
+            className="gov-card gov-record-section"
           >
             {loadingDetail ? (
-              <p role="status" className="text-sm text-slate-600">
+              <p role="status" className="gov-empty-state">
                 Loading inspection details...
               </p>
             ) : detailError ? (
-              <p role="alert" className="text-sm text-red-700">
+              <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}
               </p>
             ) : detail ? (
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">
+                <div className="gov-record-toolbar">
+                  <h2 className="gov-record-title">
                     Inspection #{detail.id} — {detail.pest_case.pest_name}
                   </h2>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(detail.pest_case.status)}`}
+                    className={statusBadge(detail.pest_case.status)}
                   >
-                    {detail.pest_case.status}
+                    {workflowLabel(detail.pest_case.status)}
                   </span>
                 </div>
-                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <dl className="gov-detail-grid">
                   <div>
-                    <dt className="font-medium text-slate-600">Farm plot</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Farm plot</dt>
+                    <dd className="gov-detail-value">
                       {detail.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                       {detail.pest_case.farm?.barangay ?? "—"} (
                       {(detail.pest_case.farm?.area_hectares ?? 0).toFixed(2)} ha)
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Farmer</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Farmer</dt>
+                    <dd className="gov-detail-value">
                       {detail.pest_case.farm?.farmer?.full_name ?? "—"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Reported area</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Reported area</dt>
+                    <dd className="gov-detail-value">
                       {detail.pest_case.reported_area_hectares.toFixed(2)} ha (unchanged)
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Assigned technician</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Assigned technician</dt>
+                    <dd className="gov-detail-value">
                       {detail.assigned_to?.full_name ?? `#${detail.assigned_to_user_id}`}
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Scheduled for</dt>
-                    <dd className="text-slate-900">{detail.scheduled_for}</dd>
+                    <dt className="gov-detail-label">Scheduled for</dt>
+                    <dd className="gov-detail-value">{detail.scheduled_for}</dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Field result</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Field result</dt>
+                    <dd className="gov-detail-value">
+                      <span className={detail.pest_confirmed === null ? "gov-status-badge" : detail.pest_confirmed ? "gov-status-badge gov-status-field-validated" : "gov-status-badge gov-status-not-confirmed"}>
                       {detail.pest_confirmed === null
                         ? "Pending"
                         : detail.pest_confirmed
                           ? `Confirmed — ${(detail.validated_area_hectares ?? 0).toFixed(2)} ha`
                           : "Not confirmed — 0.00 ha"}
+                      </span>
                     </dd>
                   </div>
                   {detail.findings !== null && (
-                    <div className="sm:col-span-2">
-                      <dt className="font-medium text-slate-600">Findings</dt>
-                      <dd className="text-slate-900">{detail.findings}</dd>
+                    <div className="gov-detail-wide">
+                      <dt className="gov-detail-label">Findings</dt>
+                      <dd className="gov-detail-value">{detail.findings}</dd>
                     </div>
                   )}
                 </dl>
 
                 {isPending(detail) ? (
-                  <div className="mt-6 grid gap-6">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900">
+                  <div className="gov-form">
+                    <div className="gov-workflow-panel">
+                      <h3 className="gov-record-title">
                         Reschedule or reassign
                       </h3>
                       <form
                         onSubmit={(event) => void handleReschedule(event, detail)}
-                        className="mt-3 grid gap-4 sm:grid-cols-3"
+                        className="gov-form gov-form-grid"
                       >
-                        <div>
+                        <div className="gov-field">
                           <label
                             htmlFor="reschedule_date"
-                            className="block text-sm font-medium text-slate-700"
+                            className="gov-label"
                           >
                             New date (optional)
                           </label>
@@ -779,20 +748,20 @@ export default function InspectionsPage() {
                             id="reschedule_date"
                             name="scheduled_for"
                             type="date"
-                            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                            className="gov-input"
                           />
                         </div>
-                        <div>
+                        <div className="gov-field">
                           <label
                             htmlFor="reassign_technician"
-                            className="block text-sm font-medium text-slate-700"
+                            className="gov-label"
                           >
                             New technician (optional)
                           </label>
                           <select
                             id="reassign_technician"
                             name="assigned_to_user_id"
-                            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                            className="gov-select"
                           >
                             <option value="">Keep current</option>
                             {technicians.map((tech) => (
@@ -802,11 +771,11 @@ export default function InspectionsPage() {
                             ))}
                           </select>
                         </div>
-                        <div className="flex items-end">
+                        <div className="gov-form-actions">
                           <button
                             type="submit"
                             disabled={rescheduling || recording}
-                            className="rounded-lg bg-sky-700 px-4 py-2 font-medium text-white hover:bg-sky-800 disabled:cursor-wait disabled:opacity-60"
+                            className="gov-button gov-button-primary"
                           >
                             {rescheduling ? "Saving..." : "Save schedule"}
                           </button>
@@ -814,20 +783,20 @@ export default function InspectionsPage() {
                       </form>
                     </div>
                     {canRecord(detail) ? (
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-900">
+                      <div className="gov-workflow-panel">
+                        <h3 className="gov-record-title">
                           Record field findings
                         </h3>
                         <form
                           onSubmit={(event) => void handleRecordFindings(event, detail)}
-                          className="mt-3 grid gap-4 sm:grid-cols-2"
+                          className="gov-form gov-form-grid"
                         >
-                          <div className="sm:col-span-2">
+                          <div className="gov-field gov-field-wide">
                             <label
                               htmlFor="findings"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
-                              Findings
+                              Findings <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <textarea
                               id="findings"
@@ -836,22 +805,22 @@ export default function InspectionsPage() {
                               maxLength={2000}
                               required
                               placeholder="e.g. Bored stalks on east rows, frass present"
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-textarea"
                             />
                           </div>
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="pest_confirmed"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
-                              Pest damage confirmed?
+                              Pest damage confirmed? <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <select
                               id="pest_confirmed"
                               name="pest_confirmed"
                               required
                               defaultValue=""
-                              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                              className="gov-select"
                             >
                               <option value="" disabled>
                                 Select confirmation
@@ -860,12 +829,12 @@ export default function InspectionsPage() {
                               <option value="false">No — not confirmed</option>
                             </select>
                           </div>
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="validated_area_hectares"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
-                              Validated affected area (ha)
+                              Validated affected area (ha) <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <input
                               id="validated_area_hectares"
@@ -876,29 +845,29 @@ export default function InspectionsPage() {
                               step={0.01}
                               required
                               placeholder="e.g. 1.25 (0 when not confirmed)"
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-input"
                             />
                           </div>
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="inspected_on"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
-                              Inspection date
+                              Inspection date <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <input
                               id="inspected_on"
                               name="inspected_on"
                               type="date"
                               required
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-input"
                             />
                           </div>
-                          <div className="flex items-end">
+                          <div className="gov-form-actions">
                             <button
                               type="submit"
                               disabled={recording || rescheduling}
-                              className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                              className="gov-button gov-button-primary"
                             >
                               {recording ? "Saving..." : "Save findings"}
                             </button>
@@ -906,20 +875,20 @@ export default function InspectionsPage() {
                         </form>
                       </div>
                     ) : (
-                      <p role="status" className="text-sm text-slate-600">
+                      <p role="status" className="gov-empty-state">
                         Only an administrator or the assigned technician can record
                         findings for this inspection.
                       </p>
                     )}
                   </div>
                 ) : (
-                  <p role="status" className="mt-6 text-sm text-slate-600">
+                  <p role="status" className="gov-timeline-note">
                     Findings have been recorded and can no longer be edited in this
                     phase.
                   </p>
                 )}
                 {actionError && (
-                  <p role="alert" className="mt-4 text-sm text-red-700">
+                  <p role="alert" className="gov-alert gov-alert-error mt-4">
                     {actionError}
                   </p>
                 )}
@@ -927,7 +896,6 @@ export default function InspectionsPage() {
             ) : null}
           </section>
         )}
-      </div>
     </main>
   );
 }

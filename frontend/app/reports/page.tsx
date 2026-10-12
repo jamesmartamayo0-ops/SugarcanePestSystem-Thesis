@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   ReportsRequestError,
@@ -11,6 +12,27 @@ import {
   type OperationalReport,
 } from "@/lib/reports";
 import type { PestCaseStatus } from "@/lib/pest-cases";
+
+// Rendering only: date-only values retain their calendar day; timestamps use Manila time.
+function formatRecordDate(value: string | null): string {
+  if (value === null) {
+    return "—";
+  }
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  // Do not guess a timezone for an unqualified timestamp.
+  if (!dateOnly && !/(?:Z|[+-]\d{2}:\d{2})$/i.test(value)) {
+    return value;
+  }
+  const parsed = new Date(dateOnly ? `${value}T00:00:00Z` : value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en-PH", {
+    dateStyle: "medium",
+    ...(dateOnly ? {} : { timeStyle: "short" as const }),
+    timeZone: dateOnly ? "UTC" : "Asia/Manila",
+  }).format(parsed);
+}
 
 export default function ReportsPage() {
   const router = useRouter();
@@ -153,29 +175,12 @@ export default function ReportsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">Operational Reports</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Factual workflow counts and case rows. No treatment-effectiveness scoring.
-        </p>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
-          <Link
-            href="/pest-cases"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            View pest cases
-          </Link>
-        </div>
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">Operational Reports</h1>
+        <p className="gov-page-description">Factual workflow counts and case rows. No treatment-effectiveness scoring.</p>
+        <Link href="/pest-cases" className="gov-activity-link">View pest cases</Link>
+      </header>
 
         <form
           aria-label="Report filters"
@@ -189,32 +194,33 @@ export default function ReportsPage() {
               to: reportedTo,
             });
           }}
-          className="mt-8 grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2 lg:grid-cols-3"
+          className="gov-card gov-record-section gov-form gov-report-filters"
         >
-          <div>
-            <label htmlFor="report_status" className="block text-sm font-medium text-slate-700">
+          <h2 className="gov-record-title gov-field-wide">Filter report</h2>
+          <div className="gov-field">
+            <label htmlFor="report_status" className="gov-label">
               Status
             </label>
             <select
               id="report_status"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+              className="gov-select"
             >
               <option value="all">All statuses</option>
-              <option value="REPORTED">REPORTED</option>
-              <option value="FOR_INSPECTION">FOR_INSPECTION</option>
-              <option value="INSPECTION_SCHEDULED">INSPECTION_SCHEDULED</option>
-              <option value="NOT_CONFIRMED">NOT_CONFIRMED</option>
-              <option value="FIELD_VALIDATED">FIELD_VALIDATED</option>
-              <option value="UNDER_INTERVENTION">UNDER_INTERVENTION</option>
-              <option value="FOLLOW_UP_DUE">FOLLOW_UP_DUE</option>
-              <option value="REINTERVENTION_REQUIRED">REINTERVENTION_REQUIRED</option>
-              <option value="CLOSED">CLOSED</option>
+              <option value="REPORTED">{workflowLabel("REPORTED")}</option>
+              <option value="FOR_INSPECTION">{workflowLabel("FOR_INSPECTION")}</option>
+              <option value="INSPECTION_SCHEDULED">{workflowLabel("INSPECTION_SCHEDULED")}</option>
+              <option value="NOT_CONFIRMED">{workflowLabel("NOT_CONFIRMED")}</option>
+              <option value="FIELD_VALIDATED">{workflowLabel("FIELD_VALIDATED")}</option>
+              <option value="UNDER_INTERVENTION">{workflowLabel("UNDER_INTERVENTION")}</option>
+              <option value="FOLLOW_UP_DUE">{workflowLabel("FOLLOW_UP_DUE")}</option>
+              <option value="REINTERVENTION_REQUIRED">{workflowLabel("REINTERVENTION_REQUIRED")}</option>
+              <option value="CLOSED">{workflowLabel("CLOSED")}</option>
             </select>
           </div>
-          <div>
-            <label htmlFor="report_farmer" className="block text-sm font-medium text-slate-700">
+          <div className="gov-field">
+            <label htmlFor="report_farmer" className="gov-label">
               Farmer ID
             </label>
             <input
@@ -225,11 +231,11 @@ export default function ReportsPage() {
               }}
               placeholder="All"
               inputMode="numeric"
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              className="gov-input"
             />
           </div>
-          <div>
-            <label htmlFor="report_farm" className="block text-sm font-medium text-slate-700">
+          <div className="gov-field">
+            <label htmlFor="report_farm" className="gov-label">
               Farm ID
             </label>
             <input
@@ -240,11 +246,11 @@ export default function ReportsPage() {
               }}
               placeholder="All"
               inputMode="numeric"
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              className="gov-input"
             />
           </div>
-          <div>
-            <label htmlFor="report_from" className="block text-sm font-medium text-slate-700">
+          <div className="gov-field">
+            <label htmlFor="report_from" className="gov-label">
               Reported from
             </label>
             <input
@@ -252,11 +258,11 @@ export default function ReportsPage() {
               type="date"
               value={reportedFrom}
               onChange={(event) => setReportedFrom(event.target.value)}
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              className="gov-input"
             />
           </div>
-          <div>
-            <label htmlFor="report_to" className="block text-sm font-medium text-slate-700">
+          <div className="gov-field">
+            <label htmlFor="report_to" className="gov-label">
               Reported to
             </label>
             <input
@@ -264,14 +270,14 @@ export default function ReportsPage() {
               type="date"
               value={reportedTo}
               onChange={(event) => setReportedTo(event.target.value)}
-              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              className="gov-input"
             />
           </div>
-          <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-3">
+          <div className="gov-form-actions">
             <button
               type="submit"
               disabled={loading}
-              className="rounded-lg bg-emerald-700 px-4 py-1.5 text-sm font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+              className="gov-button gov-button-primary"
             >
               {loading ? "Loading..." : "Apply filters"}
             </button>
@@ -287,164 +293,164 @@ export default function ReportsPage() {
                 void loadReport({ status: "all", farmerId: "all", farmId: "all", from: "", to: "" });
               }}
               disabled={loading}
-              className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+              className="gov-button gov-button-secondary gov-button-compact"
             >
               Clear filters
             </button>
           </div>
         </form>
         {filterError && (
-          <p role="alert" className="mt-3 text-sm text-red-700">
+          <p role="alert" className="gov-alert gov-alert-error gov-feedback">
             {filterError}
           </p>
         )}
 
         {loading ? (
-          <p role="status" className="mt-6 text-sm text-slate-600">
+          <p role="status" className="gov-empty-state">
             Loading operational report...
           </p>
         ) : listError ? (
-          <p role="alert" className="mt-6 text-sm text-red-700">
+          <p role="alert" className="gov-alert gov-alert-error gov-feedback">
             {listError}
           </p>
         ) : report ? (
           <div>
-            <section aria-label="Report summary" className="mt-6">
-              <h2 className="text-lg font-semibold text-slate-900">Summary</h2>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <p className="text-sm font-medium text-slate-600">Total cases</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
+            <section aria-label="Report summary" className="gov-card gov-record-section">
+              <h2 className="gov-record-title">Summary</h2>
+              <div className="gov-summary-grid gov-report-summary">
+                <div className="gov-stat">
+                  <p className="gov-stat-label">Total cases</p>
+                  <p className="gov-stat-value">
                     {report.summary.total_cases}
                   </p>
                 </div>
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <p className="text-sm font-medium text-slate-600">Open cases</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
+                <div className="gov-stat">
+                  <p className="gov-stat-label">Open cases</p>
+                  <p className="gov-stat-value">
                     {report.summary.open_cases}
                   </p>
                 </div>
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <p className="text-sm font-medium text-slate-600">Closed cases</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
+                <div className="gov-stat">
+                  <p className="gov-stat-label">Closed cases</p>
+                  <p className="gov-stat-value">
                     {report.summary.closed_cases}
                   </p>
                 </div>
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <p className="text-sm font-medium text-slate-600">Follow-ups due</p>
-                  <p className="mt-1 text-2xl font-semibold text-slate-900">
+                <div className="gov-stat">
+                  <p className="gov-stat-label">Follow-ups due</p>
+                  <p className="gov-stat-value">
                     {report.summary.follow_ups_due}
                   </p>
                 </div>
               </div>
             </section>
 
-            <section aria-label="Cases by status" className="mt-8">
-              <h2 className="text-lg font-semibold text-slate-900">Cases by status</h2>
-              <dl className="mt-3 grid gap-3 sm:grid-cols-3">
+            <section aria-label="Cases by status" className="gov-card gov-record-section">
+              <h2 className="gov-record-title">Cases by status</h2>
+              <dl className="gov-report-list">
                 {(
                   Object.entries(report.by_status) as [string, number][]
                 ).map(([status, count]) => (
-                  <div key={status} className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                    <dt className="text-sm font-medium text-slate-600">{status}</dt>
-                    <dd className="text-sm font-semibold text-slate-900">{count}</dd>
+                  <div key={status} className="gov-report-row">
+                    <dt><span className={`gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`}>{workflowLabel(status)}</span></dt>
+                    <dd className="gov-report-count">{count}</dd>
                   </div>
                 ))}
               </dl>
             </section>
 
-            <section aria-label="Follow-up summary" className="mt-8">
-              <h2 className="text-lg font-semibold text-slate-900">Follow-up summary</h2>
-              <dl className="mt-3 grid gap-3 sm:grid-cols-3">
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Pending follow-up</dt>
-                  <dd className="text-sm font-semibold text-slate-900">{report.follow_up_summary.pending}</dd>
+            <section aria-label="Follow-up summary" className="gov-card gov-record-section">
+              <h2 className="gov-record-title">Follow-up summary</h2>
+              <dl className="gov-report-list">
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Pending follow-up</dt>
+                  <dd className="gov-report-count">{report.follow_up_summary.pending}</dd>
                 </div>
-                <div className="flex justify-between gap-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2">
-                  <dt className="text-sm font-medium text-red-800">Overdue</dt>
-                  <dd className="text-sm font-semibold text-red-900">{report.follow_up_summary.overdue}</dd>
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Overdue</dt>
+                  <dd className="gov-report-count">{report.follow_up_summary.overdue}</dd>
                 </div>
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Completed reassessments</dt>
-                  <dd className="text-sm font-semibold text-slate-900">{report.follow_up_summary.completed}</dd>
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Completed reassessments</dt>
+                  <dd className="gov-report-count">{report.follow_up_summary.completed}</dd>
                 </div>
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Resolved follow-up</dt>
-                  <dd className="text-sm font-semibold text-slate-900">{report.follow_up_summary.resolved}</dd>
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Resolved follow-up</dt>
+                  <dd className="gov-report-count">{report.follow_up_summary.resolved}</dd>
                 </div>
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Further intervention required</dt>
-                  <dd className="text-sm font-semibold text-slate-900">
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Further intervention required</dt>
+                  <dd className="gov-report-count">
                     {report.follow_up_summary.reintervention_required}
                   </dd>
                 </div>
               </dl>
             </section>
 
-            <section aria-label="Intervention summary" className="mt-8">
-              <h2 className="text-lg font-semibold text-slate-900">Intervention summary</h2>
-              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Completed interventions</dt>
-                  <dd className="text-sm font-semibold text-slate-900">{report.intervention_summary.completed}</dd>
+            <section aria-label="Intervention summary" className="gov-card gov-record-section">
+              <h2 className="gov-record-title">Intervention summary</h2>
+              <dl className="gov-report-list">
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Completed interventions</dt>
+                  <dd className="gov-report-count">{report.intervention_summary.completed}</dd>
                 </div>
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Pending interventions</dt>
-                  <dd className="text-sm font-semibold text-slate-900">{report.intervention_summary.pending}</dd>
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Pending interventions</dt>
+                  <dd className="gov-report-count">{report.intervention_summary.pending}</dd>
                 </div>
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Cases with repeat intervention</dt>
-                  <dd className="text-sm font-semibold text-slate-900">
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Cases with repeat intervention</dt>
+                  <dd className="gov-report-count">
                     {report.intervention_summary.cases_with_repeat_intervention}
                   </dd>
                 </div>
-                <div className="flex justify-between gap-4 rounded-lg border border-slate-200 px-4 py-2">
-                  <dt className="text-sm font-medium text-slate-600">Total records</dt>
-                  <dd className="text-sm font-semibold text-slate-900">{report.intervention_summary.total_records}</dd>
+                <div className="gov-report-row">
+                  <dt className="gov-stat-label">Total records</dt>
+                  <dd className="gov-report-count">{report.intervention_summary.total_records}</dd>
                 </div>
               </dl>
             </section>
 
-            <section aria-label="Report cases" className="mt-8">
-              <h2 className="text-lg font-semibold text-slate-900">Report cases</h2>
+            <section aria-label="Report cases" className="gov-card gov-record-section">
+              <h2 className="gov-record-title">Report cases</h2>
               {report.cases.length === 0 ? (
-                <p role="status" className="mt-3 text-sm text-slate-600">
+                <p role="status" className="gov-empty-state">
                   No cases match the current filters.
                 </p>
               ) : (
-                <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full min-w-[860px] text-left text-sm">
-                    <thead className="bg-slate-50 text-slate-600">
+                <div className="gov-table-wrap mt-3">
+                  <table className="gov-table min-w-[860px]">
+                    <thead>
                       <tr>
-                        <th scope="col" className="px-4 py-3 font-medium">Case</th>
-                        <th scope="col" className="px-4 py-3 font-medium">Farmer / Farm</th>
-                        <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                        <th scope="col" className="px-4 py-3 font-medium">Cycle / Follow-up</th>
+                        <th scope="col">Case</th>
+                        <th scope="col">Farmer / Farm</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Cycle / Follow-up</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200">
+                    <tbody>
                       {report.cases.map((entry) => (
                         <tr key={entry.case_id}>
-                          <td className="px-4 py-3 text-slate-900">
+                          <td>
                             #{entry.case_id} — {entry.pest_name}
                             <span className="block text-xs text-slate-600">
-                              Reported {entry.reported_at ?? "—"} ·{" "}
+                              Reported {formatRecordDate(entry.reported_at)} ·{" "}
                               {entry.reported_area_hectares.toFixed(2)} ha
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-slate-900">
+                          <td>
                             {entry.farmer ?? "—"}
                             <span className="block text-xs text-slate-600">
                               {entry.farm ?? "—"} · {entry.barangay ?? "—"}
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-slate-900">{entry.current_status}</td>
-                          <td className="px-4 py-3 text-slate-900">
+                          <td><span className={`gov-status-badge gov-status-${entry.current_status.toLowerCase().replaceAll("_", "-")}`}>{workflowLabel(entry.current_status)}</span></td>
+                          <td>
                             {entry.latest_intervention_cycle === null
                               ? "—"
                               : `Cycle ${entry.latest_intervention_cycle}`}
                             <span className="block text-xs text-slate-600">
-                              {entry.latest_follow_up_outcome ?? "No recorded follow-up"}
+                              {workflowLabel(entry.latest_follow_up_outcome ?? "No recorded follow-up")}
                             </span>
                           </td>
                         </tr>
@@ -456,7 +462,6 @@ export default function ReportsPage() {
             </section>
           </div>
         ) : null}
-      </div>
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AppShell } from "@/components/app-shell";
 import { AuthProvider } from "@/components/auth-provider";
 import "./globals.css";
 
@@ -13,7 +14,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en">
       <body>
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

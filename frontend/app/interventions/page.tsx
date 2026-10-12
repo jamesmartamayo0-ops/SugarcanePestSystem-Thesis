@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
+import { workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   INTERVENTION_METHOD_CATEGORIES,
@@ -59,38 +60,20 @@ function followUpLabel(followUp: string | null, completed: boolean): string {
 
 function followUpBadge(followUp: string | null): string {
   if (followUp === null) {
-    return "bg-slate-200 text-slate-700";
+    return "gov-status-badge";
   }
   const today = todayIso();
   if (followUp < today) {
-    return "bg-red-100 text-red-800";
+    return "gov-status-badge gov-status-reintervention-required";
   }
   if (followUp === today) {
-    return "bg-amber-100 text-amber-800";
+    return "gov-status-badge gov-status-follow-up-due";
   }
-  return "bg-sky-100 text-sky-800";
+  return "gov-status-badge";
 }
 
 function statusBadge(status: string): string {
-  if (status === "FOLLOW_UP_DUE") {
-    return "bg-emerald-100 text-emerald-800";
-  }
-  if (status === "UNDER_INTERVENTION") {
-    return "bg-violet-100 text-violet-800";
-  }
-  if (status === "FIELD_VALIDATED") {
-    return "bg-teal-100 text-teal-800";
-  }
-  if (status === "REINTERVENTION_REQUIRED") {
-    return "bg-orange-100 text-orange-800";
-  }
-  if (status === "CLOSED") {
-    return "bg-slate-800 text-white";
-  }
-  if (status === "NOT_CONFIRMED") {
-    return "bg-slate-200 text-slate-700";
-  }
-  return "bg-amber-100 text-amber-800";
+  return `gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`;
 }
 
 function cycleFor(all: InterventionDetail[], item: InterventionDetail): number {
@@ -531,73 +514,63 @@ export default function InterventionsPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-12">
-      <div className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">
-          Bais City Agriculturist&apos;s Office
-        </p>
-        <h1 className="mt-4 text-3xl font-semibold text-slate-900">
-          Intervention Management
-        </h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Plan human-selected field actions for FIELD_VALIDATED and
-          REINTERVENTION_REQUIRED cases, then record completion with a follow-up
+    <main className="gov-page">
+      <header className="gov-page-header">
+        <h1 className="gov-page-title">Interventions</h1>
+        <p className="gov-page-description">
+          Plan human-selected field actions for Field Validated and
+          Reintervention Required cases, then record completion with a follow-up
           due date. Historical interventions are preserved so first and repeat
           cycles stay distinguishable. Categories are documentation labels only
           and never prescribe chemicals, rates, or dosages.
         </p>
-        <div className="mt-4 flex flex-wrap gap-4">
-          <Link
-            href="/dashboard"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
-          >
-            Back to dashboard
-          </Link>
+        <div className="gov-record-controls mt-3">
           <Link
             href="/pest-cases"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View pest cases
           </Link>
           <Link
             href="/inspections"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View inspections
           </Link>
           <Link
             href="/follow-ups"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View follow-ups
           </Link>
           <Link
             href="/reports"
-            className="inline-flex text-sm font-medium text-emerald-700 hover:text-emerald-800"
+            className="gov-activity-link"
           >
             View reports
           </Link>
         </div>
+      </header>
 
-        <section aria-label="Start intervention" className="mt-8">
-          <h2 className="text-lg font-semibold text-slate-900">Start intervention</h2>
+        <section aria-label="Start intervention" className="gov-card gov-record-section">
+          <h2 className="gov-record-title">Start intervention</h2>
           {eligibleCases.length === 0 && !loading ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
-              No FIELD_VALIDATED or REINTERVENTION_REQUIRED cases are waiting for an
+            <p role="status" className="gov-empty-state">
+              No Field Validated or Reintervention Required cases are waiting for an
               intervention plan.
             </p>
           ) : (
-            <form onSubmit={handleStart} className="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="pest_case_id" className="block text-sm font-medium text-slate-700">
-                  Eligible case
+            <form onSubmit={handleStart} className="gov-form gov-form-grid">
+              <div className="gov-field">
+                <label htmlFor="pest_case_id" className="gov-label">
+                  Eligible case <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="pest_case_id"
                   name="pest_case_id"
                   required
                   defaultValue=""
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  className="gov-select"
                 >
                   <option value="" disabled>
                     Select a case
@@ -605,21 +578,21 @@ export default function InterventionsPage() {
                   {eligibleCases.map((entry) => (
                     <option key={entry.id} value={entry.id}>
                       #{entry.id} — {entry.pest_name} ({entry.reported_area_hectares.toFixed(2)} ha) —{" "}
-                      {entry.status}
+                      {workflowLabel(entry.status)}
                     </option>
                   ))}
                 </select>
               </div>
-              <div>
-                <label htmlFor="method_category" className="block text-sm font-medium text-slate-700">
-                  Category (human-selected)
+              <div className="gov-field">
+                <label htmlFor="method_category" className="gov-label">
+                  Category (human-selected) <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="method_category"
                   name="method_category"
                   required
                   defaultValue=""
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  className="gov-select"
                 >
                   <option value="" disabled>
                     Select a category
@@ -631,9 +604,9 @@ export default function InterventionsPage() {
                   ))}
                 </select>
               </div>
-              <div className="sm:col-span-2">
-                <label htmlFor="method_description" className="block text-sm font-medium text-slate-700">
-                  Description of planned work
+              <div className="gov-field gov-field-wide">
+                <label htmlFor="method_description" className="gov-label">
+                  Description of planned work <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <textarea
                   id="method_description"
@@ -642,19 +615,19 @@ export default function InterventionsPage() {
                   maxLength={2000}
                   required
                   placeholder="e.g. Manual removal of affected shoots on east rows"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  className="gov-textarea"
                 />
               </div>
-              <div>
-                <label htmlFor="assigned_to_user_id" className="block text-sm font-medium text-slate-700">
-                  Assigned technician
+              <div className="gov-field">
+                <label htmlFor="assigned_to_user_id" className="gov-label">
+                  Assigned technician <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="assigned_to_user_id"
                   name="assigned_to_user_id"
                   required
                   defaultValue=""
-                  className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  className="gov-select"
                 >
                   <option value="" disabled>
                     Select a technician
@@ -666,34 +639,34 @@ export default function InterventionsPage() {
                   ))}
                 </select>
               </div>
-              <div>
-                <label htmlFor="scheduled_for" className="block text-sm font-medium text-slate-700">
-                  Scheduled date
+              <div className="gov-field">
+                <label htmlFor="scheduled_for" className="gov-label">
+                  Scheduled date <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="scheduled_for"
                   name="scheduled_for"
                   type="date"
                   required
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                  className="gov-input"
                 />
               </div>
-              <div className="sm:col-span-2">
-                <label htmlFor="follow_up_due_on" className="block text-sm font-medium text-slate-700">
+              <div className="gov-field gov-field-wide">
+                <label htmlFor="follow_up_due_on" className="gov-label">
                   Planned follow-up date (optional)
                 </label>
                 <input
                   id="follow_up_due_on"
                   name="follow_up_due_on"
                   type="date"
-                  className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 sm:max-w-xs"
+                  className="gov-input"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div className="gov-form-actions">
                 <button
                   type="submit"
                   disabled={starting}
-                  className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                  className="gov-button gov-button-primary"
                 >
                   {starting ? "Starting..." : "Start intervention"}
                 </button>
@@ -701,22 +674,22 @@ export default function InterventionsPage() {
             </form>
           )}
           {formError && (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {formError}
             </p>
           )}
           {notice && (
-            <p role="status" className="mt-4 text-sm text-emerald-700">
+            <p role="status" className="gov-alert gov-alert-success mt-4">
               {notice}
             </p>
           )}
         </section>
 
-        <section aria-label="Intervention records" className="mt-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-lg font-semibold text-slate-900">Intervention records</h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <label htmlFor="case_filter" className="text-sm font-medium text-slate-700">
+        <section aria-label="Intervention records" className="gov-card gov-record-section">
+          <div className="gov-record-toolbar">
+            <h2 className="gov-record-title">Intervention records</h2>
+            <div className="gov-record-controls">
+              <label htmlFor="case_filter" className="gov-label">
                 Case
               </label>
               <input
@@ -728,9 +701,9 @@ export default function InterventionsPage() {
                 }}
                 placeholder="All"
                 inputMode="numeric"
-                className="w-24 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-input w-24"
               />
-              <label htmlFor="technician_filter" className="text-sm font-medium text-slate-700">
+              <label htmlFor="technician_filter" className="gov-label">
                 Technician
               </label>
               <select
@@ -741,7 +714,7 @@ export default function InterventionsPage() {
                   setTechnicianFilter(next);
                   void loadAll(caseFilter, next);
                 }}
-                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900"
+                className="gov-select"
               >
                 <option value="all">All technicians</option>
                 {technicians.map((tech) => (
@@ -754,78 +727,78 @@ export default function InterventionsPage() {
                 type="button"
                 onClick={() => void loadAll(caseFilter, technicianFilter)}
                 disabled={loading}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60"
+                className="gov-button gov-button-secondary gov-button-compact"
               >
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
           {loading ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               Loading interventions...
             </p>
           ) : listError ? (
-            <p role="alert" className="mt-4 text-sm text-red-700">
+            <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
             </p>
           ) : interventions.length === 0 ? (
-            <p role="status" className="mt-4 text-sm text-slate-600">
+            <p role="status" className="gov-empty-state">
               No interventions found. Start the first intervention above.
             </p>
           ) : (
-            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
-              <table className="w-full min-w-[820px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+            <div className="gov-table-wrap mt-4">
+              <table className="gov-table min-w-[820px]">
+                <thead>
                   <tr>
-                    <th scope="col" className="px-4 py-3 font-medium">Intervention</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Case / Farm / Farmer</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Technician</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Status</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Follow-up</th>
-                    <th scope="col" className="px-4 py-3 font-medium">Action</th>
+                    <th scope="col">Intervention</th>
+                    <th scope="col">Case / Farm / Farmer</th>
+                    <th scope="col">Technician</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Follow-up</th>
+                    <th scope="col">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
+                <tbody>
                   {interventions.map((entry) => {
                     const completed = !isPending(entry);
                     const cycle = cycleFor(interventions, entry);
                     return (
                       <tr key={entry.id}>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td>
                           #{entry.id} — {entry.method_category} (cycle {cycle})
                           <span className="block text-xs text-slate-600">
                             Scheduled {entry.scheduled_for}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td>
                           #{entry.pest_case_id} — {entry.pest_case.pest_name}
                           <span className="block text-xs text-slate-600">
                             {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                             {entry.pest_case.farm?.farmer?.full_name ?? "—"}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-slate-900">
+                        <td>
                           {entry.assigned_to?.full_name ?? `#${entry.assigned_to_user_id}`}
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(entry.pest_case.status)}`}
+                            className={statusBadge(entry.pest_case.status)}
                           >
-                            {entry.pest_case.status}
+                            {workflowLabel(entry.pest_case.status)}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${followUpBadge(entry.follow_up_due_on)}`}
+                            className={followUpBadge(entry.follow_up_due_on)}
                           >
                             {followUpLabel(entry.follow_up_due_on, completed)}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td>
                           <button
                             type="button"
                             onClick={() => void openDetail(entry.id)}
-                            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            className="gov-button gov-button-secondary gov-button-compact"
                           >
                             {selectedId === entry.id ? "Selected" : "View"}
                           </button>
@@ -842,101 +815,101 @@ export default function InterventionsPage() {
         {selectedId !== null && (
           <section
             aria-label="Intervention detail"
-            className="mt-8 rounded-xl border border-slate-200 p-6"
+            className="gov-card gov-record-section"
           >
             {loadingDetail ? (
-              <p role="status" className="text-sm text-slate-600">
+              <p role="status" className="gov-empty-state">
                 Loading intervention details...
               </p>
             ) : detailError ? (
-              <p role="alert" className="text-sm text-red-700">
+              <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}
               </p>
             ) : detail ? (
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold text-slate-900">
+                <div className="gov-record-toolbar">
+                  <h2 className="gov-record-title">
                     Intervention #{detail.id} — {detail.pest_case.pest_name} (cycle{" "}
                     {cycleFor(interventions, detail)})
                   </h2>
                   <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge(detail.pest_case.status)}`}
+                    className={statusBadge(detail.pest_case.status)}
                   >
-                    {detail.pest_case.status}
+                    {workflowLabel(detail.pest_case.status)}
                   </span>
                 </div>
-                <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+                <dl className="gov-detail-grid">
                   <div>
-                    <dt className="font-medium text-slate-600">Farm plot</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Farm plot</dt>
+                    <dd className="gov-detail-value">
                       {detail.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                       {detail.pest_case.farm?.barangay ?? "—"} (
                       {(detail.pest_case.farm?.area_hectares ?? 0).toFixed(2)} ha)
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Farmer</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Farmer</dt>
+                    <dd className="gov-detail-value">
                       {detail.pest_case.farm?.farmer?.full_name ?? "—"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Category</dt>
-                    <dd className="text-slate-900">{detail.method_category}</dd>
+                    <dt className="gov-detail-label">Category</dt>
+                    <dd className="gov-detail-value">{detail.method_category}</dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Assigned technician</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Assigned technician</dt>
+                    <dd className="gov-detail-value">
                       {detail.assigned_to?.full_name ?? `#${detail.assigned_to_user_id}`}
                     </dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Scheduled for</dt>
-                    <dd className="text-slate-900">{detail.scheduled_for}</dd>
+                    <dt className="gov-detail-label">Scheduled for</dt>
+                    <dd className="gov-detail-value">{detail.scheduled_for}</dd>
                   </div>
                   <div>
-                    <dt className="font-medium text-slate-600">Follow-up due</dt>
-                    <dd className="text-slate-900">
+                    <dt className="gov-detail-label">Follow-up due</dt>
+                    <dd className="gov-detail-value">
                       <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${followUpBadge(detail.follow_up_due_on)}`}
+                        className={followUpBadge(detail.follow_up_due_on)}
                       >
                         {followUpLabel(detail.follow_up_due_on, !isPending(detail))}
                       </span>
                     </dd>
                   </div>
-                  <div className="sm:col-span-2">
-                    <dt className="font-medium text-slate-600">Description</dt>
-                    <dd className="text-slate-900">{detail.method_description}</dd>
+                  <div className="gov-detail-wide">
+                    <dt className="gov-detail-label">Description</dt>
+                    <dd className="gov-detail-value">{detail.method_description}</dd>
                   </div>
                   {detail.performed_on !== null && (
                     <div>
-                      <dt className="font-medium text-slate-600">Performed on</dt>
-                      <dd className="text-slate-900">{detail.performed_on}</dd>
+                      <dt className="gov-detail-label">Performed on</dt>
+                      <dd className="gov-detail-value">{detail.performed_on}</dd>
                     </div>
                   )}
                   {detail.completion_notes !== null && (
-                    <div className="sm:col-span-2">
-                      <dt className="font-medium text-slate-600">Completion notes</dt>
-                      <dd className="text-slate-900">{detail.completion_notes}</dd>
+                    <div className="gov-detail-wide">
+                      <dt className="gov-detail-label">Completion notes</dt>
+                      <dd className="gov-detail-value">{detail.completion_notes}</dd>
                     </div>
                   )}
                 </dl>
 
                 {isPending(detail) ? (
                   canAct(detail) ? (
-                    <div className="mt-6 grid gap-6">
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-900">
+                    <div className="gov-form">
+                      <div className="gov-workflow-panel">
+                        <h3 className="gov-record-title">
                           Edit intervention plan
                         </h3>
                         <form
                           onSubmit={(event) => void handlePlan(event, detail)}
-                          className="mt-3 grid gap-4 sm:grid-cols-2"
+                          className="gov-form gov-form-grid"
                         >
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="plan_category"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
                               Category (optional)
                             </label>
@@ -944,7 +917,7 @@ export default function InterventionsPage() {
                               id="plan_category"
                               name="method_category"
                               defaultValue=""
-                              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                              className="gov-select"
                             >
                               <option value="">Keep current ({detail.method_category})</option>
                               {INTERVENTION_METHOD_CATEGORIES.map((category) => (
@@ -954,10 +927,10 @@ export default function InterventionsPage() {
                               ))}
                             </select>
                           </div>
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="plan_scheduled"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
                               Scheduled date (optional)
                             </label>
@@ -965,13 +938,13 @@ export default function InterventionsPage() {
                               id="plan_scheduled"
                               name="scheduled_for"
                               type="date"
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-input"
                             />
                           </div>
-                          <div className="sm:col-span-2">
+                          <div className="gov-field gov-field-wide">
                             <label
                               htmlFor="plan_description"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
                               Description (optional)
                             </label>
@@ -981,13 +954,13 @@ export default function InterventionsPage() {
                               rows={2}
                               maxLength={2000}
                               placeholder={detail.method_description}
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-textarea"
                             />
                           </div>
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="plan_technician"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
                               Technician (optional)
                             </label>
@@ -995,7 +968,7 @@ export default function InterventionsPage() {
                               id="plan_technician"
                               name="assigned_to_user_id"
                               defaultValue=""
-                              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                              className="gov-select"
                             >
                               <option value="">Keep current</option>
                               {technicians.map((tech) => (
@@ -1005,10 +978,10 @@ export default function InterventionsPage() {
                               ))}
                             </select>
                           </div>
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="plan_follow_up"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
                               Planned follow-up (optional, blank clears)
                             </label>
@@ -1016,47 +989,47 @@ export default function InterventionsPage() {
                               id="plan_follow_up"
                               name="follow_up_due_on"
                               type="date"
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-input"
                             />
                           </div>
-                          <div className="flex items-end sm:col-span-2">
+                          <div className="gov-form-actions">
                             <button
                               type="submit"
                               disabled={savingPlan || completing}
-                              className="rounded-lg bg-sky-700 px-4 py-2 font-medium text-white hover:bg-sky-800 disabled:cursor-wait disabled:opacity-60"
+                              className="gov-button gov-button-primary"
                             >
                               {savingPlan ? "Saving..." : "Save plan"}
                             </button>
                           </div>
                         </form>
                       </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-slate-900">
+                      <div className="gov-workflow-panel">
+                        <h3 className="gov-record-title">
                           Record completion
                         </h3>
                         <form
                           onSubmit={(event) => void handleComplete(event, detail)}
-                          className="mt-3 grid gap-4 sm:grid-cols-2"
+                          className="gov-form gov-form-grid"
                         >
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="performed_on"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
-                              Performed date
+                              Performed date <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <input
                               id="performed_on"
                               name="performed_on"
                               type="date"
                               required
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-input"
                             />
                           </div>
-                          <div>
+                          <div className="gov-field">
                             <label
                               htmlFor="complete_follow_up"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
                               Follow-up due date
                             </label>
@@ -1064,15 +1037,15 @@ export default function InterventionsPage() {
                               id="complete_follow_up"
                               name="follow_up_due_on"
                               type="date"
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-input"
                             />
                           </div>
-                          <div className="sm:col-span-2">
+                          <div className="gov-field gov-field-wide">
                             <label
                               htmlFor="completion_notes"
-                              className="block text-sm font-medium text-slate-700"
+                              className="gov-label"
                             >
-                              Completion notes
+                              Completion notes <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <textarea
                               id="completion_notes"
@@ -1081,11 +1054,11 @@ export default function InterventionsPage() {
                               maxLength={2000}
                               required
                               placeholder="e.g. Cleared affected shoots on east rows; regrowth check needed"
-                              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900"
+                              className="gov-textarea"
                             />
                           </div>
                           {detail.follow_up_due_on !== null && (
-                            <div className="flex items-center gap-2 sm:col-span-2">
+                            <div className="gov-inline-field gov-field-wide">
                               <input
                                 id="reuse_planned_follow_up_date"
                                 name="reuse_planned_follow_up_date"
@@ -1100,11 +1073,11 @@ export default function InterventionsPage() {
                               </label>
                             </div>
                           )}
-                          <div className="flex items-end sm:col-span-2">
+                          <div className="gov-form-actions">
                             <button
                               type="submit"
                               disabled={completing || savingPlan}
-                              className="rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 disabled:cursor-wait disabled:opacity-60"
+                              className="gov-button gov-button-primary"
                             >
                               {completing ? "Saving..." : "Record completion"}
                             </button>
@@ -1113,25 +1086,25 @@ export default function InterventionsPage() {
                       </div>
                     </div>
                   ) : (
-                    <p role="status" className="mt-6 text-sm text-slate-600">
+                    <p role="status" className="gov-timeline-note">
                       Only an administrator or the assigned technician can edit or
                       complete this intervention.
                     </p>
                   )
                 ) : (
-                  <p role="status" className="mt-6 text-sm text-slate-600">
+                  <p role="status" className="gov-timeline-note">
                     This intervention is complete and read-only. Follow-up is pending
                     for {detail.follow_up_due_on ?? "an unset date"}.{" "}
                     <Link
                       href="/follow-ups"
-                      className="font-medium text-emerald-700 hover:text-emerald-800"
+                      className="gov-activity-link"
                     >
                       Go to follow-ups
                     </Link>
                   </p>
                 )}
                 {actionError && (
-                  <p role="alert" className="mt-4 text-sm text-red-700">
+                  <p role="alert" className="gov-alert gov-alert-error mt-4">
                     {actionError}
                   </p>
                 )}
@@ -1139,7 +1112,6 @@ export default function InterventionsPage() {
             ) : null}
           </section>
         )}
-      </div>
     </main>
   );
 }
