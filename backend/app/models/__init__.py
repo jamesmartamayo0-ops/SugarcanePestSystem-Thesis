@@ -1,4 +1,9 @@
-from app.models.farm import Farm, normalize_area_hectares, normalize_plot_identifier
+from app.models.farm import (
+    Farm,
+    normalize_area_hectares,
+    normalize_coordinate,
+    normalize_plot_identifier,
+)
 from app.models.farmer import (
     Farmer,
     normalize_barangay,
@@ -57,6 +62,7 @@ __all__ = [
     "intervention_manila_today",
     "manila_today",
     "normalize_area_hectares",
+    "normalize_coordinate",
     "normalize_assessment_notes",
     "normalize_barangay",
     "normalize_completion_notes",

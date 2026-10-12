@@ -14,7 +14,7 @@ from app.models import User, UserRole
 EXPECTED_DATABASE = "sugarcane_pest_test"
 EXPECTED_USER = "sugarcane_app"
 EXPECTED_TABLES = {"alembic_version", "users", "farmers", "farms", "pest_cases", "inspections", "interventions", "follow_ups"}
-EXPECTED_REVISION = "c9d4e6a8b2f1"
+EXPECTED_REVISION = "d6b8f2a1c4e7"
 TEST_PASSWORD = "Integration-Test-Only-Password-123!"
 
 

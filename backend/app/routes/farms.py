@@ -10,8 +10,11 @@ from app.models import Farm, Farmer
 
 farms_bp = Blueprint("farms", __name__, url_prefix="/api/v1/farms")
 
-_CREATE_FIELDS = frozenset({"farmer_id", "plot_identifier", "barangay", "area_hectares"})
-_UPDATE_ALLOWED = frozenset({"plot_identifier", "barangay", "area_hectares"})
+_CREATE_REQUIRED = frozenset({"farmer_id", "plot_identifier", "barangay", "area_hectares"})
+_CREATE_ALLOWED = _CREATE_REQUIRED | {"latitude", "longitude"}
+_UPDATE_ALLOWED = frozenset(
+    {"plot_identifier", "barangay", "area_hectares", "latitude", "longitude"}
+)
 _MAX_INPUT_LENGTHS = {"plot_identifier": 500, "barangay": 500}
 
 
@@ -34,6 +37,8 @@ def _farm_public(farm: Farm) -> dict:
         "plot_identifier": farm.plot_identifier,
         "barangay": farm.barangay,
         "area_hectares": float(farm.area_hectares),
+        "latitude": float(farm.latitude) if farm.latitude is not None else None,
+        "longitude": float(farm.longitude) if farm.longitude is not None else None,
         "farmer": _farmer_reference(farm.farmer),
         "created_at": _iso(farm.created_at),
         "updated_at": _iso(farm.updated_at),
@@ -148,6 +153,11 @@ def _precheck_farm_payload(payload: dict, *, is_create: bool) -> str | None:
                 return "Invalid farm data."
         else:
             return "Invalid farm data."
+    coordinate_fields = {"latitude", "longitude"} & set(payload)
+    if coordinate_fields and coordinate_fields != {"latitude", "longitude"}:
+        return "Latitude and longitude must be provided together."
+    if coordinate_fields and ((payload["latitude"] is None) != (payload["longitude"] is None)):
+        return "Latitude and longitude must both be null or both contain values."
     return None
 
 
@@ -162,7 +172,11 @@ def create_farm():
         return auth_error("Invalid farm data.", 400)
 
     payload = request.get_json(silent=True)
-    if not isinstance(payload, dict) or set(payload) != _CREATE_FIELDS:
+    if (
+        not isinstance(payload, dict)
+        or not _CREATE_REQUIRED.issubset(payload)
+        or not set(payload).issubset(_CREATE_ALLOWED)
+    ):
         return auth_error("Invalid farm data.", 400)
 
     invalid = _precheck_farm_payload(payload, is_create=True)
@@ -192,6 +206,8 @@ def create_farm():
             plot_identifier=payload["plot_identifier"],
             barangay=payload["barangay"],
             area_hectares=payload["area_hectares"],
+            latitude=payload.get("latitude"),
+            longitude=payload.get("longitude"),
         )
     except ValueError as exc:
         return auth_error(str(exc), 400)
@@ -257,6 +273,9 @@ def update_farm(farm_id: int):
             farm.barangay = payload["barangay"]
         if "area_hectares" in payload:
             farm.area_hectares = payload["area_hectares"]
+        if "latitude" in payload:
+            farm.latitude = payload["latitude"]
+            farm.longitude = payload["longitude"]
     except ValueError as exc:
         db.session.rollback()
         return auth_error(str(exc), 400)

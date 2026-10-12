@@ -281,11 +281,11 @@ def test_data_bearing_downgrade_and_reupgrade_with_phase_3e_records(
                     transaction.rollback()
             # Re-upgrade restores the nine-status workflow (history itself is
             # documented as lost by the downgrade).
-            upgrade(directory=str(migrations), revision="c9d4e6a8b2f1")
+            upgrade(directory=str(migrations), revision="d6b8f2a1c4e7")
             with db.engine.connect() as connection:
                 assert connection.execute(
                     text("SELECT version_num FROM alembic_version")
-                ).scalar_one() == "c9d4e6a8b2f1"
+                ).scalar_one() == "d6b8f2a1c4e7"
                 assert connection.execute(
                     text("SELECT to_regclass('public.follow_ups')")
                 ).scalar_one() == "follow_ups"

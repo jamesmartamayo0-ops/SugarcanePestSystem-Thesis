@@ -242,11 +242,11 @@ def test_data_bearing_migration_downgrade_collapses_phase_3d_statuses(
     finally:
         with integration_app.app_context():
             db.session.remove()
-            upgrade(directory=str(migrations), revision="c9d4e6a8b2f1")
+            upgrade(directory=str(migrations), revision="d6b8f2a1c4e7")
             with db.engine.connect() as connection:
                 assert connection.execute(
                     text("SELECT version_num FROM alembic_version")
-                ).scalar_one() == "c9d4e6a8b2f1"
+                ).scalar_one() == "d6b8f2a1c4e7"
                 assert connection.execute(
                     text("SELECT to_regclass('public.interventions')")
                 ).scalar_one() == "interventions"

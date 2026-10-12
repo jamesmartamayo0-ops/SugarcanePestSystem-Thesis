@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app import auth, create_app
 from app.models import Farm, Farmer
-from app.models.farm import normalize_area_hectares
+from app.models.farm import normalize_area_hectares, normalize_coordinate
 from app.models.farmer import normalize_barangay, normalize_contact_number
 from app.routes import farmers as farmers_module
 from app.routes import farms as farms_module
@@ -60,9 +60,21 @@ def farm_case(monkeypatch):
         farmer_store[farmer.id] = farmer
         return farmer
 
-    def seed_farm(farmer, plot="Plot A", barangay="Bunao", area="2.50"):
+    def seed_farm(
+        farmer,
+        plot="Plot A",
+        barangay="Bunao",
+        area="2.50",
+        latitude=None,
+        longitude=None,
+    ):
         farm = Farm(
-            farmer_id=farmer.id, plot_identifier=plot, barangay=barangay, area_hectares=area
+            farmer_id=farmer.id,
+            plot_identifier=plot,
+            barangay=barangay,
+            area_hectares=area,
+            latitude=latitude,
+            longitude=longitude,
         )
         farm.id = state["next_farm_id"]
         state["next_farm_id"] += 1
@@ -311,7 +323,7 @@ def test_farm_list_shape_and_filter(farm_case):
     entry = body["data"]["farms"][0]
     assert set(entry) == {
         "id", "farmer_id", "plot_identifier", "barangay",
-        "area_hectares", "farmer", "created_at", "updated_at",
+        "area_hectares", "latitude", "longitude", "farmer", "created_at", "updated_at",
     }
     assert set(entry["farmer"]) == {"id", "full_name", "barangay"}
     assert entry["farmer"]["full_name"] == "Juan Dela Cruz"
@@ -336,7 +348,176 @@ def test_create_farm_persists_relationship(farm_case):
     assert body["plot_identifier"] == "Plot C"
     assert body["area_hectares"] == 3.75
     assert body["farmer"]["id"] == 1
+    assert body["latitude"] is None
+    assert body["longitude"] is None
     assert farm_store[body["id"]].farmer_id == 1
+
+
+def test_create_farm_with_coordinates_persists_and_serializes(farm_case):
+    client, _, farm_store, _ = farm_case
+    token = login_admin(client)
+    response = client.post(
+        FARMS,
+        json={
+            "farmer_id": 1,
+            "plot_identifier": "Plot C",
+            "barangay": "Bunao",
+            "area_hectares": 3,
+            "latitude": 9.589321,
+            "longitude": 123.121234,
+        },
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 201
+    farm = response.get_json()["data"]["farm"]
+    assert farm["latitude"] == 9.589321
+    assert farm["longitude"] == 123.121234
+    assert farm_store[farm["id"]].latitude == Decimal("9.589321")
+    assert farm_store[farm["id"]].longitude == Decimal("123.121234")
+
+
+@pytest.mark.parametrize(
+    ("plot", "latitude", "longitude"),
+    [
+        ("Plot Boundary Low", -90.000000, -180.000000),
+        ("Plot Boundary High", 90.000000, 180.000000),
+    ],
+)
+def test_create_farm_accepts_coordinate_boundaries(
+    farm_case, plot, latitude, longitude
+):
+    client, _, farm_store, _ = farm_case
+    token = login_admin(client)
+    response = client.post(
+        FARMS,
+        json={
+            "farmer_id": 1,
+            "plot_identifier": plot,
+            "barangay": "Bunao",
+            "area_hectares": 3,
+            "latitude": latitude,
+            "longitude": longitude,
+        },
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 201
+    farm = response.get_json()["data"]["farm"]
+    assert farm["latitude"] == latitude
+    assert farm["longitude"] == longitude
+    assert farm_store[farm["id"]].latitude == Decimal(str(latitude)).quantize(
+        Decimal("0.000001")
+    )
+    assert farm_store[farm["id"]].longitude == Decimal(str(longitude)).quantize(
+        Decimal("0.000001")
+    )
+
+
+@pytest.mark.parametrize(
+    ("coordinates", "expected_message"),
+    [
+        (
+            {"latitude": "north", "longitude": 123.121234},
+            "Latitude must be between -90 and 90.",
+        ),
+        (
+            {"latitude": 9.589321, "longitude": "east"},
+            "Longitude must be between -180 and 180.",
+        ),
+    ],
+)
+def test_create_farm_rejects_non_numeric_coordinates_without_persisting(
+    farm_case, coordinates, expected_message
+):
+    client, _, farm_store, _ = farm_case
+    token = login_admin(client)
+    original_ids = set(farm_store)
+    response = client.post(
+        FARMS,
+        json={
+            "farmer_id": 1,
+            "plot_identifier": "Plot C",
+            "barangay": "Bunao",
+            "area_hectares": 3,
+            **coordinates,
+        },
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"data": None, "message": expected_message}
+    assert set(farm_store) == original_ids
+
+
+@pytest.mark.parametrize(
+    ("coordinates", "expected_message"),
+    [
+        (
+            {"latitude": 9.1234567, "longitude": 123.123456},
+            "Latitude may have at most 6 decimal places.",
+        ),
+        (
+            {"latitude": 9.123456, "longitude": 123.1234567},
+            "Longitude may have at most 6 decimal places.",
+        ),
+    ],
+)
+def test_create_farm_rejects_overprecision_without_rounding_or_persisting(
+    farm_case, coordinates, expected_message
+):
+    client, _, farm_store, _ = farm_case
+    token = login_admin(client)
+    original_ids = set(farm_store)
+    response = client.post(
+        FARMS,
+        json={
+            "farmer_id": 1,
+            "plot_identifier": "Plot C",
+            "barangay": "Bunao",
+            "area_hectares": 3,
+            **coordinates,
+        },
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"data": None, "message": expected_message}
+    assert set(farm_store) == original_ids
+
+
+@pytest.mark.parametrize(
+    ("coordinates", "expected_message"),
+    [
+        ({"latitude": 9.5}, "Latitude and longitude must be provided together."),
+        ({"longitude": 123.1}, "Latitude and longitude must be provided together."),
+        (
+            {"latitude": None, "longitude": 123.1},
+            "Latitude and longitude must both be null or both contain values.",
+        ),
+        (
+            {"latitude": 9.5, "longitude": None},
+            "Latitude and longitude must both be null or both contain values.",
+        ),
+        ({"latitude": -90.000001, "longitude": 123.1}, "Latitude must be between -90 and 90."),
+        ({"latitude": 90.000001, "longitude": 123.1}, "Latitude must be between -90 and 90."),
+        ({"latitude": 9.5, "longitude": -180.000001}, "Longitude must be between -180 and 180."),
+        ({"latitude": 9.5, "longitude": 180.000001}, "Longitude must be between -180 and 180."),
+    ],
+)
+def test_create_farm_rejects_invalid_coordinates(farm_case, coordinates, expected_message):
+    client, _, _, _ = farm_case
+    token = login_admin(client)
+    payload = {
+        "farmer_id": 1,
+        "plot_identifier": "Plot C",
+        "barangay": "Bunao",
+        "area_hectares": 3,
+        **coordinates,
+    }
+    response = client.post(
+        FARMS,
+        json=payload,
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"data": None, "message": expected_message}
 
 
 def test_create_farm_unknown_farmer_returns_404(farm_case):
@@ -411,6 +592,88 @@ def test_update_farm_and_farmer_id_immutable(farm_case):
     assert client.put(FARM(1), json={"area_hectares": 0}, headers=headers).status_code == 400
 
 
+def test_update_farm_coordinates_and_preserve_them_on_unrelated_edit(farm_case):
+    client, _, farm_store, _ = farm_case
+    farm_store[1].latitude = Decimal("9.589321")
+    farm_store[1].longitude = Decimal("123.121234")
+    token = login_admin(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+
+    unrelated = client.put(FARM(1), json={"barangay": "Camanjac"}, headers=headers)
+    assert unrelated.status_code == 200
+    assert unrelated.get_json()["data"]["farm"]["latitude"] == 9.589321
+    assert farm_store[1].longitude == Decimal("123.121234")
+
+    updated = client.put(
+        FARM(1),
+        json={"latitude": 9.600001, "longitude": 123.200002},
+        headers=headers,
+    )
+    assert updated.status_code == 200
+    assert updated.get_json()["data"]["farm"]["latitude"] == 9.600001
+    assert farm_store[1].longitude == Decimal("123.200002")
+
+
+def test_update_farm_coordinates_can_be_explicitly_cleared(farm_case):
+    client, _, farm_store, _ = farm_case
+    farm_store[1].latitude = Decimal("9.589321")
+    farm_store[1].longitude = Decimal("123.121234")
+    token = login_admin(client)
+    response = client.put(
+        FARM(1),
+        json={"latitude": None, "longitude": None},
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["data"]["farm"]["latitude"] is None
+    assert farm_store[1].latitude is None
+    assert farm_store[1].longitude is None
+
+
+@pytest.mark.parametrize(
+    "coordinate_update",
+    [
+        {"latitude": 9.600001},
+        {"longitude": 123.200002},
+        {"latitude": None, "longitude": 123.200002},
+        {"latitude": -90.000001, "longitude": 123.121234},
+        {"latitude": 9.589321, "longitude": 180.000001},
+        {"latitude": 9.589321, "longitude": "east"},
+        {"latitude": 9.1234567, "longitude": 123.121234},
+    ],
+    ids=[
+        "latitude-only",
+        "longitude-only",
+        "mixed-null-and-numeric",
+        "latitude-out-of-range",
+        "longitude-out-of-range",
+        "non-numeric-longitude",
+        "overprecision-latitude",
+    ],
+)
+def test_invalid_coordinate_updates_preserve_existing_pair(farm_case, coordinate_update):
+    client, _, farm_store, _ = farm_case
+    original_latitude = Decimal("9.589321")
+    original_longitude = Decimal("123.121234")
+    farm_store[1].latitude = original_latitude
+    farm_store[1].longitude = original_longitude
+    token = login_admin(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+
+    response = client.put(FARM(1), json=coordinate_update, headers=headers)
+    assert response.status_code == 400
+    assert set(response.get_json()) == {"data", "message"}
+    assert response.get_json()["data"] is None
+
+    reloaded = client.get(FARM(1))
+    assert reloaded.status_code == 200
+    farm = reloaded.get_json()["data"]["farm"]
+    assert farm["latitude"] == float(original_latitude)
+    assert farm["longitude"] == float(original_longitude)
+    assert farm_store[1].latitude == original_latitude
+    assert farm_store[1].longitude == original_longitude
+
+
 def test_farmer_and_farm_database_errors_sanitized(farm_case, monkeypatch):
     client, _, _, _ = farm_case
     login_admin(client)
@@ -460,13 +723,26 @@ def test_model_normalization_helpers():
     for bad in ("0", "-1", "10000.01", "1.234", "many", "", True, None, float("nan")):
         with pytest.raises(ValueError):
             normalize_area_hectares(bad)
+    assert normalize_coordinate("9.5", latitude=True) == Decimal("9.500000")
+    assert normalize_coordinate(123, latitude=False) == Decimal("123.000000")
+    assert normalize_coordinate(None, latitude=True) is None
+    for value, latitude in ((-90.000001, True), (90.000001, True), (-180.000001, False), (180.000001, False)):
+        with pytest.raises(ValueError):
+            normalize_coordinate(value, latitude=latitude)
 
 
 def test_model_relationship_and_constraints():
     assert Farmer.__table__.name == "farmers"
     assert Farm.__table__.name == "farms"
     names = {constraint.name for constraint in Farm.__table__.constraints}
-    assert {"uq_farms_farmer_plot", "ck_farms_area_positive", "ck_farms_area_max"} <= names
+    assert {
+        "uq_farms_farmer_plot",
+        "ck_farms_area_positive",
+        "ck_farms_area_max",
+        "ck_farms_latitude_range",
+        "ck_farms_longitude_range",
+        "ck_farms_coordinates_pair",
+    } <= names
     fk = next(
         constraint
         for constraint in Farm.__table__.constraints
