@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
+import FarmLocationMap from "@/components/farm-location-map";
 import {
   FarmersRequestError,
   listFarmers,
@@ -17,6 +18,13 @@ import {
   updateFarm,
   type FarmWithFarmer,
 } from "@/lib/farms";
+import {
+  createCoordinatePayload,
+  normalizeFarmCoordinates,
+  updateCoordinatePayload,
+  type FarmCoordinates,
+  type FarmLocationChange,
+} from "@/lib/farm-location";
 
 const AREA_PATTERN = /^\d+(\.\d{1,2})?$/;
 
@@ -32,6 +40,78 @@ function parseArea(raw: string): number | null {
   return value;
 }
 
+type EditLocationDraft = {
+  farmId: number;
+  coordinates: FarmCoordinates | null;
+  change: FarmLocationChange;
+};
+
+function coordinatesFromFarm(farm: FarmWithFarmer): FarmCoordinates | null {
+  if (farm.latitude === null || farm.longitude === null) {
+    return null;
+  }
+  return { latitude: farm.latitude, longitude: farm.longitude };
+}
+
+type FarmLocationFieldProps = {
+  coordinates: FarmCoordinates | null;
+  mapKey: string;
+  onSelect: (coordinates: FarmCoordinates) => void;
+  onClear: () => void;
+};
+
+function FarmLocationField({
+  coordinates,
+  mapKey,
+  onSelect,
+  onClear,
+}: FarmLocationFieldProps) {
+  return (
+    <section className="gov-location-field" aria-labelledby={`${mapKey}-title`}>
+      <div>
+        <h3 id={`${mapKey}-title`} className="gov-location-title">
+          Approximate Farm Location
+        </h3>
+        <p className="gov-field-help">
+          Select the approximate farm location reported by the farmer.
+        </p>
+      </div>
+      <FarmLocationMap
+        key={mapKey}
+        coordinates={coordinates}
+        onSelect={(latitude, longitude) =>
+          onSelect(normalizeFarmCoordinates(latitude, longitude))
+        }
+      />
+      <div className="gov-location-summary" aria-live="polite">
+        {coordinates ? (
+          <>
+            <p>
+              <span className="gov-location-summary-label">Selected location:</span>{" "}
+              <span className="gov-location-coordinates">
+                {coordinates.latitude.toFixed(6)}, {coordinates.longitude.toFixed(6)}
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={onClear}
+              className="gov-button gov-button-secondary gov-button-compact"
+            >
+              Clear location
+            </button>
+          </>
+        ) : (
+          <p>No farm location selected.</p>
+        )}
+      </div>
+      <p className="gov-location-disclaimer">
+        Approximate location for agricultural monitoring. This does not establish legal
+        land ownership.
+      </p>
+    </section>
+  );
+}
+
 export default function FarmsPage() {
   const router = useRouter();
   const auth = useAuth();
@@ -43,7 +123,9 @@ export default function FarmsPage() {
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [formNotice, setFormNotice] = useState<string | null>(null);
+  const [createLocation, setCreateLocation] = useState<FarmCoordinates | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editLocation, setEditLocation] = useState<EditLocationDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -168,6 +250,7 @@ export default function FarmsPage() {
           plot_identifier: plotIdentifier.trim(),
           barangay: barangay.trim(),
           area_hectares: area,
+          ...createCoordinatePayload(createLocation),
         },
         auth.csrfToken,
       );
@@ -176,6 +259,7 @@ export default function FarmsPage() {
       );
       setFormNotice(`Farm ${created.plot_identifier} was added.`);
       form.reset();
+      setCreateLocation(null);
     } catch (failure) {
       if (failure instanceof FarmsRequestError && failure.kind === "unauthenticated") {
         router.replace("/login");
@@ -215,12 +299,17 @@ export default function FarmsPage() {
     setEditError(null);
     setFormNotice(null);
     try {
+      const locationChange =
+        editLocation?.farmId === target.id
+          ? editLocation.change
+          : ({ kind: "unchanged" } satisfies FarmLocationChange);
       const updated = await updateFarm(
         target.id,
         {
           plot_identifier: plotIdentifier.trim(),
           barangay: barangay.trim(),
           area_hectares: area,
+          ...updateCoordinatePayload(locationChange),
         },
         auth.csrfToken,
       );
@@ -228,6 +317,7 @@ export default function FarmsPage() {
         current.map((entry) => (entry.id === updated.id ? updated : entry)),
       );
       setEditingId(null);
+      setEditLocation(null);
       setFormNotice(`Farm ${updated.plot_identifier} was updated.`);
     } catch (failure) {
       if (failure instanceof FarmsRequestError && failure.kind === "unauthenticated") {
@@ -358,6 +448,12 @@ export default function FarmsPage() {
                   className="gov-input"
                 />
               </div>
+              <FarmLocationField
+                coordinates={createLocation}
+                mapKey="create-farm-location"
+                onSelect={setCreateLocation}
+                onClear={() => setCreateLocation(null)}
+              />
               <div className="gov-form-actions">
                 <button
                   type="submit"
@@ -451,7 +547,18 @@ export default function FarmsPage() {
                           <button
                             type="button"
                             onClick={() => {
-                              setEditingId(editingId === entry.id ? null : entry.id);
+                              if (editingId === entry.id) {
+                                setEditingId(null);
+                                setEditLocation(null);
+                              } else {
+                                const coordinates = coordinatesFromFarm(entry);
+                                setEditingId(entry.id);
+                                setEditLocation({
+                                  farmId: entry.id,
+                                  coordinates,
+                                  change: { kind: "unchanged" },
+                                });
+                              }
                               setEditError(null);
                             }}
                             className="gov-button gov-button-secondary gov-button-compact"
@@ -480,6 +587,10 @@ export default function FarmsPage() {
             if (!target) {
               return null;
             }
+            const displayedCoordinates =
+              editLocation?.farmId === target.id
+                ? editLocation.coordinates
+                : coordinatesFromFarm(target);
             return (
               <section aria-label="Edit farm" className="gov-card gov-record-section">
                 <h2 className="gov-record-title">
@@ -538,6 +649,24 @@ export default function FarmsPage() {
                       className="gov-input"
                     />
                   </div>
+                  <FarmLocationField
+                    coordinates={displayedCoordinates}
+                    mapKey={`edit-farm-location-${target.id}`}
+                    onSelect={(coordinates) =>
+                      setEditLocation({
+                        farmId: target.id,
+                        coordinates,
+                        change: { kind: "selected", coordinates },
+                      })
+                    }
+                    onClear={() =>
+                      setEditLocation({
+                        farmId: target.id,
+                        coordinates: null,
+                        change: { kind: "cleared" },
+                      })
+                    }
+                  />
                   <div className="gov-form-actions">
                     <button
                       type="submit"

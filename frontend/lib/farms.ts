@@ -12,6 +12,8 @@ export type FarmWithFarmer = {
   plot_identifier: string;
   barangay: string;
   area_hectares: number;
+  latitude: number | null;
+  longitude: number | null;
   farmer: FarmFarmerRef;
   created_at: string | null;
   updated_at: string | null;
@@ -80,6 +82,8 @@ function parseFarm(value: unknown): FarmWithFarmer {
     throw new FarmsRequestError("unexpected", "Farm list could not be read.");
   }
   const entry = value as Record<string, unknown>;
+  const latitude = entry.latitude;
+  const longitude = entry.longitude;
   if (
     typeof entry.id !== "number" ||
     !Number.isSafeInteger(entry.id) ||
@@ -91,6 +95,17 @@ function parseFarm(value: unknown): FarmWithFarmer {
     typeof entry.barangay !== "string" ||
     typeof entry.area_hectares !== "number" ||
     !Number.isFinite(entry.area_hectares) ||
+    (latitude !== null &&
+      (typeof latitude !== "number" ||
+        !Number.isFinite(latitude) ||
+        latitude < -90 ||
+        latitude > 90)) ||
+    (longitude !== null &&
+      (typeof longitude !== "number" ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180)) ||
+    ((latitude === null) !== (longitude === null)) ||
     (entry.created_at !== null && typeof entry.created_at !== "string") ||
     (entry.updated_at !== null && typeof entry.updated_at !== "string")
   ) {
@@ -102,6 +117,8 @@ function parseFarm(value: unknown): FarmWithFarmer {
     plot_identifier: entry.plot_identifier,
     barangay: entry.barangay,
     area_hectares: entry.area_hectares,
+    latitude,
+    longitude,
     farmer: parseFarmerRef(entry.farmer),
     created_at: entry.created_at,
     updated_at: entry.updated_at,
@@ -181,12 +198,20 @@ export async function listFarms(farmerId?: number): Promise<FarmWithFarmer[]> {
   throwForStatus(response.status, await readPayload(response), "Farm list could not be read.");
 }
 
+type OptionalCoordinatePair =
+  | { latitude: number; longitude: number }
+  | { latitude?: never; longitude?: never };
+
+type UpdateCoordinatePair =
+  | OptionalCoordinatePair
+  | { latitude: null; longitude: null };
+
 export type CreateFarmInput = {
   farmer_id: number;
   plot_identifier: string;
   barangay: string;
   area_hectares: number;
-};
+} & OptionalCoordinatePair;
 
 export async function createFarm(
   input: CreateFarmInput,
@@ -215,7 +240,7 @@ export type UpdateFarmInput = {
   plot_identifier?: string;
   barangay?: string;
   area_hectares?: number;
-};
+} & UpdateCoordinatePair;
 
 export async function updateFarm(
   farmId: number,
