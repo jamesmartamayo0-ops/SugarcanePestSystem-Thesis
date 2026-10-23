@@ -146,7 +146,7 @@ export default function PestCaseTimelinePage() {
           </p>
         ) : data ? (
           <div>
-            <section aria-label="Case summary" className="gov-card gov-record-section">
+            <section id="case-summary" aria-label="Case summary" className="gov-card gov-record-section">
               <div className="gov-record-toolbar">
                 <h2 className="gov-record-title">
                   Case #{data.pest_case.id} — {data.pest_case.pest_name}
@@ -185,7 +185,7 @@ export default function PestCaseTimelinePage() {
               </dl>
             </section>
 
-            <section aria-label="Chronological timeline" className="gov-card gov-record-section">
+            <section id="timeline" aria-label="Chronological timeline" className="gov-card gov-record-section">
               <h2 className="gov-record-title">
                 Chronological timeline
               </h2>

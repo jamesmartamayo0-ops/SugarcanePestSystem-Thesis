@@ -6,11 +6,17 @@ import { useRouter } from "next/navigation";
 
 import { formatDisplayDate } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import FarmMonitoringMap from "@/components/farm-monitoring-map";
 import {
   DashboardRequestError,
   getDashboardSummary,
   type DashboardSummary,
 } from "@/lib/dashboard";
+import {
+  FarmMapRequestError,
+  getFarmMap,
+  type FarmMapProjection,
+} from "@/lib/farm-map";
 
 const WORKFLOW_ITEMS = [
   { status: "REPORTED", label: "Reported", href: "/pest-cases?status=REPORTED" },
@@ -37,11 +43,78 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [farmMap, setFarmMap] = useState<FarmMapProjection | null>(null);
+  const [loadingFarmMap, setLoadingFarmMap] = useState(true);
+  const [farmMapError, setFarmMapError] = useState<string | null>(null);
 
   useEffect(() => {
     if (auth.status === "unauthenticated") {
       router.replace("/login");
     }
+  }, [auth.status, router]);
+
+  async function loadFarmMap() {
+    setLoadingFarmMap(true);
+    setFarmMapError(null);
+    try {
+      setFarmMap(await getFarmMap());
+    } catch (failure: unknown) {
+      if (
+        failure instanceof FarmMapRequestError &&
+        failure.kind === "unauthenticated"
+      ) {
+        router.replace("/login");
+        return;
+      }
+      setFarmMapError(
+        failure instanceof FarmMapRequestError
+          ? failure.message
+          : "Farm monitoring map could not be read.",
+      );
+    } finally {
+      setLoadingFarmMap(false);
+    }
+  }
+
+  useEffect(() => {
+    if (auth.status !== "authenticated") {
+      return;
+    }
+    let active = true;
+    (async () => {
+      setLoadingFarmMap(true);
+      try {
+        const loaded = await getFarmMap();
+        if (!active) {
+          return;
+        }
+        setFarmMap(loaded);
+        setFarmMapError(null);
+      } catch (failure: unknown) {
+        if (!active) {
+          return;
+        }
+        if (
+          failure instanceof FarmMapRequestError &&
+          failure.kind === "unauthenticated"
+        ) {
+          router.replace("/login");
+          return;
+        }
+        setFarmMapError(
+          failure instanceof FarmMapRequestError
+            ? failure.message
+            : "Farm monitoring map could not be read.",
+        );
+      } finally {
+        if (active) {
+          setLoadingFarmMap(false);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [auth.status, router]);
 
   useEffect(() => {
@@ -216,6 +289,58 @@ export default function DashboardPage() {
                 </p>
               )}
             </section>
+          </>
+        ) : null}
+      </section>
+      <section className="gov-card gov-section gov-map-section" aria-labelledby="farm-map-heading">
+        <div className="gov-record-toolbar gov-map-heading-row">
+          <div>
+            <h2 id="farm-map-heading" className="gov-card-header">Farm Monitoring Map</h2>
+            <p className="gov-map-intro">
+              Approximate registered farm locations and their current workflow state.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="gov-button gov-button-secondary gov-button-compact"
+            onClick={() => void loadFarmMap()}
+            disabled={loadingFarmMap}
+          >
+            {loadingFarmMap ? "Loading..." : "Refresh map"}
+          </button>
+        </div>
+        {loadingFarmMap && farmMap === null ? (
+          <div className="gov-monitoring-map-message" role="status">
+            Loading farm monitoring data...
+          </div>
+        ) : farmMapError ? (
+          <div className="gov-map-error">
+            <p className="gov-alert gov-alert-error" role="alert">{farmMapError}</p>
+            <button
+              type="button"
+              className="gov-button gov-button-secondary gov-button-compact"
+              onClick={() => void loadFarmMap()}
+            >
+              Try again
+            </button>
+          </div>
+        ) : farmMap ? (
+          <>
+            <dl className="gov-summary-grid gov-map-summary-grid">
+              {[
+                { label: "Mapped Farms", value: farmMap.summary.mapped_farms, description: "Farm count" },
+                { label: "Unmapped Farms", value: farmMap.summary.unmapped_farms, description: "Farm count" },
+                { label: "Active Cases", value: farmMap.summary.active_cases, description: "Case count" },
+                { label: "Needs Attention", value: farmMap.summary.needs_attention_cases, description: "Case count" },
+              ].map((item) => (
+                <div key={item.label} className="gov-stat">
+                  <dt className="gov-stat-label">{item.label}</dt>
+                  <dd className="gov-stat-value">{item.value}</dd>
+                  <dd className="gov-page-description">{item.description}</dd>
+                </div>
+              ))}
+            </dl>
+            <FarmMonitoringMap farms={farmMap.farms} />
           </>
         ) : null}
       </section>
