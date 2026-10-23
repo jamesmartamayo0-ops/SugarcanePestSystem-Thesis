@@ -238,7 +238,8 @@ export default function FollowUpsPage() {
       setFormError("You do not have permission to record this follow-up.");
       return;
     }
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     const observedRaw = data.get("observed_on");
     const pestRaw = data.get("pest_observed");
     const areaRaw = data.get("observed_affected_area_hectares");
@@ -276,8 +277,9 @@ export default function FollowUpsPage() {
       return;
     }
     setRecording(true);
+    let created: FollowUpDetail;
     try {
-      const created = await recordFollowUp(
+      created = await recordFollowUp(
         selectedInterventionId,
         {
           observed_on: observedRaw.trim(),
@@ -288,20 +290,6 @@ export default function FollowUpsPage() {
         },
         auth.csrfToken,
       );
-      setHistory((current) =>
-        [...current, created].sort((left, right) => left.id - right.id),
-      );
-      setDue((current) =>
-        current.filter((entry) => entry.intervention_id !== selectedInterventionId),
-      );
-      setSelectedInterventionId(null);
-      setFormError(null);
-      setNotice(
-        created.outcome === "RESOLVED"
-          ? `Follow-up #${created.id} recorded. Case #${created.pest_case?.id ?? ""} is now CLOSED.`
-          : `Follow-up #${created.id} recorded. Case #${created.pest_case?.id ?? ""} now requires reintervention.`,
-      );
-      event.currentTarget.reset();
     } catch (failure) {
       if (failure instanceof FollowUpsRequestError && failure.kind === "unauthenticated") {
         router.replace("/login");
@@ -313,9 +301,24 @@ export default function FollowUpsPage() {
           ? failure.message
           : "Follow-up could not be recorded.",
       );
+      return;
     } finally {
       setRecording(false);
     }
+    setHistory((current) =>
+      [...current, created].sort((left, right) => left.id - right.id),
+    );
+    setDue((current) =>
+      current.filter((entry) => entry.intervention_id !== selectedInterventionId),
+    );
+    setSelectedInterventionId(null);
+    setFormError(null);
+    setNotice(
+      created.outcome === "RESOLVED"
+        ? `Follow-up #${created.id} recorded. Case #${created.pest_case?.id ?? ""} is now CLOSED.`
+        : `Follow-up #${created.id} recorded. Case #${created.pest_case?.id ?? ""} now requires reintervention.`,
+    );
+    form.reset();
   }
 
   if (auth.status === "loading") {
