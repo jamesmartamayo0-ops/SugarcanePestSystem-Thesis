@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import auth_error, login_required, roles_required
+from app.dashboard_farm_map import load_farm_map_projection
 from app.extensions import db
 from app.models import Farmer, Farm, FollowUp, Intervention, PestCase, PestCaseStatus
 from app.models.intervention import manila_today
@@ -132,3 +133,18 @@ def dashboard_summary():
         current_app.logger.error("Dashboard summary failed.")
         return auth_error("Dashboard service unavailable.", 503)
     return jsonify({"data": {"summary": summary}, "message": "Dashboard summary retrieved."})
+
+
+@dashboard_bp.get("/farm-map")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def dashboard_farm_map():
+    try:
+        projection = load_farm_map_projection()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Dashboard farm map failed.")
+        return auth_error("Dashboard service unavailable.", 503)
+    return jsonify(
+        {"data": projection, "message": "Farm monitoring map retrieved."}
+    )
