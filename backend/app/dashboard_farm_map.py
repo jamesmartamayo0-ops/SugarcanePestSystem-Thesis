@@ -3,7 +3,7 @@ from collections.abc import Iterable, Mapping
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 
 from app.extensions import db
 from app.models import (
@@ -16,6 +16,13 @@ from app.models import (
     PestCaseStatus,
 )
 from app.models.intervention import manila_today
+from app.scoping import (
+    apply_case_scope,
+    apply_farm_scope,
+    apply_intervention_scope,
+    current_user,
+    inspection_visibility_clause,
+)
 
 
 ACTIVE_CASE_PRIORITY = {
@@ -49,8 +56,8 @@ def _number(value: Decimal | int | float | None) -> float | int | None:
     return value
 
 
-def _farm_rows_statement():
-    return (
+def _farm_rows_statement(user=None):
+    statement = (
         select(
             Farm.id.label("farm_id"),
             Farm.plot_identifier,
@@ -64,10 +71,15 @@ def _farm_rows_statement():
         .join(Farmer, Farmer.id == Farm.farmer_id)
         .order_by(Farm.id)
     )
+    return apply_farm_scope(statement, user)
 
 
-def _case_rows_statement():
-    return (
+def _case_rows_statement(user=None):
+    inspection_scope = inspection_visibility_clause(user)
+    inspection_join = [Inspection.pest_case_id == PestCase.id]
+    if inspection_scope is not None:
+        inspection_join.append(inspection_scope)
+    statement = (
         select(
             PestCase.id.label("case_id"),
             PestCase.farm_id,
@@ -78,13 +90,14 @@ def _case_rows_statement():
             Inspection.validated_area_hectares,
             Inspection.completed_at.label("inspection_completed_at"),
         )
-        .outerjoin(Inspection, Inspection.pest_case_id == PestCase.id)
+        .outerjoin(Inspection, and_(*inspection_join))
         .order_by(PestCase.farm_id, PestCase.id)
     )
+    return apply_case_scope(statement, user)
 
 
-def _overdue_follow_up_case_ids_statement():
-    return (
+def _overdue_follow_up_case_ids_statement(user=None):
+    statement = (
         select(PestCase.id)
         .join(Intervention, Intervention.pest_case_id == PestCase.id)
         .outerjoin(FollowUp, FollowUp.intervention_id == Intervention.id)
@@ -97,6 +110,7 @@ def _overdue_follow_up_case_ids_statement():
         )
         .distinct()
     )
+    return apply_intervention_scope(statement, user)
 
 
 def _selected_case(case_rows: list[Mapping[str, Any]]) -> Mapping[str, Any] | None:
@@ -209,9 +223,12 @@ def build_farm_map_projection(
     }
 
 
-def load_farm_map_projection() -> dict:
-    """Load the projection with three set-based queries, independent of row count."""
-    farm_rows = db.session.execute(_farm_rows_statement()).mappings().all()
-    case_rows = db.session.execute(_case_rows_statement()).mappings().all()
-    overdue_ids = db.session.scalars(_overdue_follow_up_case_ids_statement()).all()
+def load_farm_map_projection(user=None) -> dict:
+    """Load the projection with three scoped, set-based queries."""
+    user = user if user is not None else current_user()
+    farm_rows = db.session.execute(_farm_rows_statement(user)).mappings().all()
+    case_rows = db.session.execute(_case_rows_statement(user)).mappings().all()
+    overdue_ids = db.session.scalars(
+        _overdue_follow_up_case_ids_statement(user)
+    ).all()
     return build_farm_map_projection(farm_rows, case_rows, overdue_ids)

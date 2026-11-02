@@ -184,11 +184,16 @@ def test_real_pest_case_workflow_persistence(integration_app, create_integration
         tech_client = integration_app.test_client()
         tech_token = login(tech_client, tech_name).get_json()["data"]["csrf_token"]
         assert tech_client.get(CASES).status_code == 200
-        assert tech_client.get(f"{CASES}/{case_id}").status_code == 200
-        updated = tech_client.put(
+        assert tech_client.get(f"{CASES}/{case_id}").status_code == 404
+        assert tech_client.put(
             f"{CASES}/{case_id}",
             json={"pest_name": pest_name, "reported_area_hectares": 3},
             headers=auth_headers(tech_token),
+        ).status_code == 404
+        updated = client.put(
+            f"{CASES}/{case_id}",
+            json={"pest_name": pest_name, "reported_area_hectares": 3},
+            headers=headers,
         )
         assert updated.status_code == 200
 

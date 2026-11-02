@@ -64,30 +64,34 @@ const PRESENTATION: Record<FarmMarkerState, MarkerPresentation> = {
     legendLabel: "Registered / no case",
     color: "#64748b",
   },
-  REPORTED: { label: "Reported", legendLabel: "Reporting / inspection", color: "#2563a6" },
+  REPORTED: {
+    label: "Reported",
+    legendLabel: "Reported / awaiting inspection",
+    color: "#2563a6",
+  },
   FOR_INSPECTION: {
     label: "For Inspection",
-    legendLabel: "Reporting / inspection",
+    legendLabel: "Reported / awaiting inspection",
     color: "#2563a6",
   },
   INSPECTION_SCHEDULED: {
     label: "Inspection Scheduled",
-    legendLabel: "Reporting / inspection",
+    legendLabel: "Reported / awaiting inspection",
     color: "#2563a6",
   },
   FIELD_VALIDATED: {
     label: "Field Validated",
-    legendLabel: "Field validated",
+    legendLabel: "Validated / intervention needed",
     color: "#b42318",
   },
   UNDER_INTERVENTION: {
     label: "Under Intervention",
-    legendLabel: "Intervention / follow-up",
+    legendLabel: "Intervention / follow-up active",
     color: "#c45d05",
   },
   FOLLOW_UP_DUE: {
     label: "Follow-up Due",
-    legendLabel: "Intervention / follow-up",
+    legendLabel: "Intervention / follow-up active",
     color: "#c45d05",
   },
   REINTERVENTION_REQUIRED: {
@@ -150,6 +154,17 @@ export function farmsForMap(
   return farms.filter(
     (farm) => farm.location !== null && farmMatchesFilter(farm, filter),
   );
+}
+
+export function farmMapFilterCounts(
+  farms: FarmMapFarm[],
+): Record<FarmMapFilter, number> {
+  return {
+    ALL: farmsForMap(farms, "ALL").length,
+    ACTIVE: farmsForMap(farms, "ACTIVE").length,
+    NEEDS_ATTENTION: farmsForMap(farms, "NEEDS_ATTENTION").length,
+    TERMINAL: farmsForMap(farms, "TERMINAL").length,
+  };
 }
 
 export function formatArea(value: number | null): string {

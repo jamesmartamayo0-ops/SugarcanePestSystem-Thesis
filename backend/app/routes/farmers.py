@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.auth import auth_error, login_required, roles_required
 from app.extensions import db
-from app.models import Farmer
+from app.models import Farm, Farmer
+from app.scoping import apply_farm_scope, apply_farmer_scope, is_admin
 
 farmers_bp = Blueprint("farmers", __name__, url_prefix="/api/v1/farmers")
 
@@ -16,14 +17,14 @@ _UPDATE_ALLOWED = frozenset({"full_name", "barangay", "contact_number"})
 _MAX_INPUT_LENGTHS = {"full_name": 500, "barangay": 500, "contact_number": 64}
 
 
-def _farmer_summary(farmer: Farmer) -> dict:
-    farms = farmer.farms or []
+def _farmer_summary(farmer: Farmer, farms=None) -> dict:
+    visible_farms = (farmer.farms or []) if farms is None else farms
     return {
         "id": farmer.id,
         "full_name": farmer.full_name,
         "barangay": farmer.barangay,
         "contact_number": farmer.contact_number,
-        "farm_count": len(farms),
+        "farm_count": len(visible_farms),
     }
 
 
@@ -36,30 +37,47 @@ def _farm_reference(farm) -> dict:
     }
 
 
-def _farmer_detail(farmer: Farmer) -> dict:
+def _farmer_detail(farmer: Farmer, farms=None) -> dict:
     created = farmer.created_at
     updated = farmer.updated_at
     if isinstance(created, datetime) and created.tzinfo is None:
         created = created.replace(tzinfo=timezone.utc)
     if isinstance(updated, datetime) and updated.tzinfo is None:
         updated = updated.replace(tzinfo=timezone.utc)
+    visible_farms = (farmer.farms or []) if farms is None else farms
     return {
         "id": farmer.id,
         "full_name": farmer.full_name,
         "barangay": farmer.barangay,
         "contact_number": farmer.contact_number,
-        "farms": [_farm_reference(farm) for farm in sorted(farmer.farms or [], key=lambda f: f.id)],
+        "farms": [_farm_reference(farm) for farm in sorted(visible_farms, key=lambda f: f.id)],
         "created_at": created.isoformat() if isinstance(created, datetime) else None,
         "updated_at": updated.isoformat() if isinstance(updated, datetime) else None,
     }
 
 
-def list_all_farmers():
-    return db.session.scalars(select(Farmer).order_by(Farmer.id)).all()
+def visible_farms_for_farmer(farmer: Farmer, user=None) -> list:
+    farms = sorted(farmer.farms or [], key=lambda farm: farm.id)
+    user = user if user is not None else g.current_user
+    if user is None or is_admin(user):
+        return farms
+    statement = apply_farm_scope(
+        select(Farm.id).where(Farm.farmer_id == farmer.id), user
+    )
+    allowed = set(db.session.scalars(statement).all())
+    return [farm for farm in farms if farm.id in allowed]
 
 
-def get_farmer_by_id(farmer_id: int):
-    return db.session.get(Farmer, farmer_id)
+def list_all_farmers(user=None):
+    return db.session.scalars(
+        apply_farmer_scope(select(Farmer).order_by(Farmer.id), user)
+    ).all()
+
+
+def get_farmer_by_id(farmer_id: int, user=None):
+    return db.session.scalar(
+        apply_farmer_scope(select(Farmer).where(Farmer.id == farmer_id), user)
+    )
 
 
 def persist_new_farmer(farmer: Farmer) -> dict:
@@ -105,7 +123,14 @@ def list_farmers():
         return auth_error("Farmer service unavailable.", 503)
     return jsonify(
         {
-            "data": {"farmers": [_farmer_summary(farmer) for farmer in farmers]},
+            "data": {
+                "farmers": [
+                    _farmer_summary(
+                        farmer, visible_farms_for_farmer(farmer, g.current_user)
+                    )
+                    for farmer in farmers
+                ]
+            },
             "message": "Farmers retrieved.",
         }
     )
@@ -123,7 +148,16 @@ def get_farmer(farmer_id: int):
         return auth_error("Farmer service unavailable.", 503)
     if farmer is None:
         return auth_error("Farmer not found.", 404)
-    return jsonify({"data": {"farmer": _farmer_detail(farmer)}, "message": "Farmer retrieved."})
+    return jsonify(
+        {
+            "data": {
+                "farmer": _farmer_detail(
+                    farmer, visible_farms_for_farmer(farmer, g.current_user)
+                )
+            },
+            "message": "Farmer retrieved.",
+        }
+    )
 
 
 @farmers_bp.post("")
@@ -215,7 +249,9 @@ def update_farmer(farmer_id: int):
         return auth_error(str(exc), 400)
 
     try:
-        detail = _farmer_detail(farmer)
+        detail = _farmer_detail(
+            farmer, visible_farms_for_farmer(farmer, g.current_user)
+        )
         commit_farmer_changes()
     except SQLAlchemyError:
         db.session.rollback()

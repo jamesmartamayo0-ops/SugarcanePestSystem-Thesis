@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  farmMapFilterCounts,
   farmMatchesFilter,
   farmsForMap,
   formatArea,
@@ -97,6 +98,21 @@ test("unmapped farms are excluded from every marker collection", () => {
   const unmapped = farm({ id: 2, location: null, has_active_case: true });
   assert.deepEqual(farmsForMap([mapped, unmapped], "ALL").map((item) => item.id), [1]);
   assert.deepEqual(farmsForMap([mapped, unmapped], "ACTIVE"), []);
+});
+
+test("filter counts only include mapped farms in each category", () => {
+  const farms = [
+    farm({ id: 1, has_active_case: true }),
+    farm({ id: 2, marker_state: "CLOSED", has_active_case: true }),
+    farm({ id: 3, needs_attention: true, marker_state: "FOR_INSPECTION" }),
+    farm({ id: 4, location: null, has_active_case: true }),
+  ];
+  assert.deepEqual(farmMapFilterCounts(farms), {
+    ALL: 3,
+    ACTIVE: 2,
+    NEEDS_ATTENTION: 1,
+    TERMINAL: 1,
+  });
 });
 
 test("area formatting never displays null or non-finite values", () => {

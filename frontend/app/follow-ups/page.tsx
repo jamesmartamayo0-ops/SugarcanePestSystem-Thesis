@@ -415,7 +415,7 @@ export default function FollowUpsPage() {
                 <thead>
                   <tr>
                     <th scope="col">Case / Farm / Farmer</th>
-                    <th scope="col">Technician</th>
+                    <th scope="col">Agriculture Technician</th>
                     <th scope="col">Method / Performed</th>
                     <th scope="col">Due</th>
                     <th scope="col">Action</th>
@@ -469,7 +469,7 @@ export default function FollowUpsPage() {
                             </button>
                           ) : (
                             <span className="text-xs text-slate-500">
-                              Assigned technician only
+                              Assigned Agriculture Technician only
                             </span>
                           )}
                         </td>

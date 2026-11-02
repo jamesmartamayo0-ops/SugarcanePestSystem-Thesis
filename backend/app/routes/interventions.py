@@ -15,6 +15,7 @@ from app.models.intervention import (
     normalize_performed_on,
     normalize_scheduled_for as normalize_intervention_scheduled_for,
 )
+from app.scoping import apply_intervention_scope, can_view_intervention
 
 interventions_bp = Blueprint("interventions", __name__, url_prefix="/api/v1/interventions")
 
@@ -86,8 +87,12 @@ def get_pending_intervention_for_update(case_id: int):
     )
 
 
-def list_all_interventions(pest_case_id: int | None = None, assigned_to: int | None = None):
-    statement = select(Intervention).order_by(Intervention.id)
+def list_all_interventions(
+    pest_case_id: int | None = None, assigned_to: int | None = None, user=None
+):
+    statement = apply_intervention_scope(
+        select(Intervention).order_by(Intervention.id), user
+    )
     if pest_case_id is not None:
         statement = statement.where(Intervention.pest_case_id == pest_case_id)
     if assigned_to is not None:
@@ -302,7 +307,9 @@ def get_intervention(intervention_id: int):
         db.session.rollback()
         current_app.logger.error("Intervention lookup failed.")
         return auth_error("Intervention service unavailable.", 503)
-    if intervention is None:
+    if intervention is None or not can_view_intervention(
+        g.current_user, intervention
+    ):
         return auth_error("Intervention not found.", 404)
     return jsonify(
         {"data": {"intervention": _intervention_detail(intervention)}, "message": "Intervention retrieved."}

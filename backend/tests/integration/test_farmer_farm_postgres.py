@@ -402,7 +402,7 @@ def test_real_duplicate_plot_unique_constraint(integration_app, create_integrati
         cleanup_demo_rows(integration_app)
 
 
-def test_real_technician_can_use_farm_workflow(integration_app, create_integration_user):
+def test_real_technician_farm_access_is_scoped(integration_app, create_integration_user):
     _, admin_name = create_integration_user(role=UserRole.ADMIN)
     _, tech_name = create_integration_user(role=UserRole.TECHNICIAN)
     admin_client = integration_app.test_client()
@@ -422,7 +422,7 @@ def test_real_technician_can_use_farm_workflow(integration_app, create_integrati
         tech_token = login(tech_client, tech_name).get_json()["data"]["csrf_token"]
         tech_headers = auth_headers(tech_token)
         assert tech_client.get(FARMERS).status_code == 200
-        assert tech_client.get(f"{FARMERS}/{farmer_id}").status_code == 200
+        assert tech_client.get(f"{FARMERS}/{farmer_id}").status_code == 404
         assert tech_client.get(FARMS).status_code == 200
         created = tech_client.post(
             FARMS,

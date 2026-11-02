@@ -7,6 +7,12 @@ from app.dashboard_farm_map import load_farm_map_projection
 from app.extensions import db
 from app.models import Farmer, Farm, FollowUp, Intervention, PestCase, PestCaseStatus
 from app.models.intervention import manila_today
+from app.scoping import (
+    apply_case_scope,
+    apply_farm_scope,
+    apply_farmer_scope,
+    apply_intervention_scope,
+)
 
 dashboard_bp = Blueprint("dashboard", __name__, url_prefix="/api/v1/dashboard")
 
@@ -14,17 +20,20 @@ _ALL_STATUSES = [status.value for status in PestCaseStatus]
 
 
 def count_farmers() -> int:
-    return int(db.session.scalar(select(func.count()).select_from(Farmer)) or 0)
+    statement = apply_farmer_scope(select(func.count()).select_from(Farmer))
+    return int(db.session.scalar(statement) or 0)
 
 
 def count_farms() -> int:
-    return int(db.session.scalar(select(func.count()).select_from(Farm)) or 0)
+    statement = apply_farm_scope(select(func.count()).select_from(Farm))
+    return int(db.session.scalar(statement) or 0)
 
 
 def count_cases_by_status() -> dict:
-    rows = db.session.execute(
+    statement = apply_case_scope(
         select(PestCase.status, func.count()).group_by(PestCase.status)
-    ).all()
+    )
+    rows = db.session.execute(statement).all()
     counts = {status: 0 for status in _ALL_STATUSES}
     for status, total in rows:
         if status in counts:
@@ -34,7 +43,8 @@ def count_cases_by_status() -> dict:
 
 def count_total_cases(status_counts: dict | None = None) -> int:
     if status_counts is None:
-        return int(db.session.scalar(select(func.count()).select_from(PestCase)) or 0)
+        statement = apply_case_scope(select(func.count()).select_from(PestCase))
+        return int(db.session.scalar(statement) or 0)
     return int(sum(status_counts.values()))
 
 
@@ -50,7 +60,7 @@ def count_follow_ups_due() -> int:
             FollowUp.id.is_(None),
         )
     )
-    return int(db.session.scalar(statement) or 0)
+    return int(db.session.scalar(apply_intervention_scope(statement)) or 0)
 
 
 def count_overdue_follow_ups() -> int:
@@ -68,12 +78,14 @@ def count_overdue_follow_ups() -> int:
             Intervention.follow_up_due_on < today,
         )
     )
-    return int(db.session.scalar(statement) or 0)
+    return int(db.session.scalar(apply_intervention_scope(statement)) or 0)
 
 
 def get_recent_cases(limit: int = 5):
-    statement = (
-        select(PestCase).order_by(PestCase.updated_at.desc(), PestCase.id.desc()).limit(limit)
+    statement = apply_case_scope(
+        select(PestCase)
+        .order_by(PestCase.updated_at.desc(), PestCase.id.desc())
+        .limit(limit)
     )
     return db.session.scalars(statement).all()
 

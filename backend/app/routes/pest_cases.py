@@ -31,6 +31,13 @@ from app.models.intervention import (
 from app.models.intervention import (
     normalize_scheduled_for as normalize_intervention_scheduled_for,
 )
+from app.scoping import (
+    apply_case_scope,
+    apply_follow_up_scope,
+    apply_inspection_scope,
+    apply_intervention_scope,
+    can_view_farm,
+)
 
 pest_cases_bp = Blueprint("pest_cases", __name__, url_prefix="/api/v1/pest-cases")
 
@@ -107,8 +114,9 @@ def list_all_pest_cases(
     search: str | None = None,
     reported_from: date | None = None,
     reported_to: date | None = None,
+    user=None,
 ):
-    statement = select(PestCase).order_by(PestCase.id)
+    statement = apply_case_scope(select(PestCase).order_by(PestCase.id), user)
     if farm_id is not None:
         statement = statement.where(PestCase.farm_id == farm_id)
     if status is not None:
@@ -150,16 +158,18 @@ def list_all_pest_cases(
     return db.session.scalars(statement).all()
 
 
-def get_pest_case_by_id(case_id: int):
-    return db.session.get(PestCase, case_id)
-
-
-def get_pest_case_for_update(case_id: int):
+def get_pest_case_by_id(case_id: int, user=None):
     return db.session.scalar(
-        select(PestCase)
-        .where(PestCase.id == case_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        apply_case_scope(select(PestCase).where(PestCase.id == case_id), user)
+    )
+
+
+def get_pest_case_for_update(case_id: int, user=None):
+    statement = apply_case_scope(
+        select(PestCase).where(PestCase.id == case_id), user
+    )
+    return db.session.scalar(
+        statement.with_for_update().execution_options(populate_existing=True)
     )
 
 
@@ -447,7 +457,9 @@ def update_pest_case(case_id: int):
         db.session.rollback()
         current_app.logger.error("Pest case farm lookup failed.")
         return auth_error("Pest case service unavailable.", 503)
-    if target_farm is None:
+    if target_farm is None or (
+        target_farm_id != case.farm_id and not can_view_farm(g.current_user, target_farm)
+    ):
         return auth_error("Farm not found.", 404)
 
     # Validate every candidate value before mutating the persistent object,
@@ -546,7 +558,9 @@ _SCHEDULE_INSPECTION_FIELDS = frozenset({"scheduled_for", "assigned_to_user_id"}
 
 def get_inspection_by_case_id(case_id: int):
     return db.session.scalar(
-        select(Inspection).where(Inspection.pest_case_id == case_id).limit(1)
+        apply_inspection_scope(
+            select(Inspection).where(Inspection.pest_case_id == case_id), None
+        ).limit(1)
     )
 
 
@@ -876,22 +890,32 @@ def start_intervention(case_id: int):
 
 def get_inspections_by_case_id(case_id: int):
     return db.session.scalars(
-        select(Inspection).where(Inspection.pest_case_id == case_id).order_by(Inspection.id)
+        apply_inspection_scope(
+            select(Inspection)
+            .where(Inspection.pest_case_id == case_id)
+            .order_by(Inspection.id)
+        )
     ).all()
 
 
 def get_interventions_by_case_id(case_id: int):
     return db.session.scalars(
-        select(Intervention).where(Intervention.pest_case_id == case_id).order_by(Intervention.id)
+        apply_intervention_scope(
+            select(Intervention)
+            .where(Intervention.pest_case_id == case_id)
+            .order_by(Intervention.id)
+        )
     ).all()
 
 
 def get_follow_ups_by_case_id(case_id: int):
     return db.session.scalars(
-        select(FollowUp)
-        .join(Intervention, Intervention.id == FollowUp.intervention_id)
-        .where(Intervention.pest_case_id == case_id)
-        .order_by(FollowUp.id)
+        apply_follow_up_scope(
+            select(FollowUp)
+            .join(Intervention, Intervention.id == FollowUp.intervention_id)
+            .where(Intervention.pest_case_id == case_id)
+            .order_by(FollowUp.id)
+        )
     ).all()
 
 

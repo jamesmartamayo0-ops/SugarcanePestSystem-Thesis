@@ -144,6 +144,13 @@ def farm_case(monkeypatch):
     monkeypatch.setattr(farmers_module, "get_farmer_by_id", fake_get_farmer)
     monkeypatch.setattr(farmers_module, "persist_new_farmer", fake_persist_farmer)
     monkeypatch.setattr(farmers_module, "commit_farmer_changes", lambda: None)
+    # Scope filtering itself is covered by the PostgreSQL privacy tests; keep
+    # this fixture's in-memory farmer relationships independent of the DB.
+    monkeypatch.setattr(
+        farmers_module,
+        "visible_farms_for_farmer",
+        lambda farmer, user=None: list(farmer.farms or []),
+    )
     monkeypatch.setattr(farms_module, "list_all_farms", fake_list_farms)
     monkeypatch.setattr(farms_module, "get_farm_by_id", fake_get_farm)
     monkeypatch.setattr(farms_module, "get_farmer_by_id", fake_get_farmer)

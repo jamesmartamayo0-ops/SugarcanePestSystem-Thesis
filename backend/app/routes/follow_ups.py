@@ -15,6 +15,11 @@ from app.models.follow_up import (
     normalize_observed_area,
     normalize_pest_observed,
 )
+from app.scoping import (
+    apply_follow_up_scope,
+    apply_intervention_scope,
+    can_view_follow_up,
+)
 
 follow_ups_bp = Blueprint("follow_ups", __name__, url_prefix="/api/v1")
 
@@ -103,8 +108,13 @@ def get_farm_by_id(farm_id: int):
     return db.session.get(Farm, farm_id)
 
 
-def list_all_follow_ups(pest_case_id: int | None = None, intervention_id: int | None = None, outcome: str | None = None):
-    statement = select(FollowUp).order_by(FollowUp.id)
+def list_all_follow_ups(
+    pest_case_id: int | None = None,
+    intervention_id: int | None = None,
+    outcome: str | None = None,
+    user=None,
+):
+    statement = apply_follow_up_scope(select(FollowUp).order_by(FollowUp.id), user)
     if outcome is not None:
         statement = statement.where(FollowUp.outcome == outcome)
     if intervention_id is not None:
@@ -116,7 +126,7 @@ def list_all_follow_ups(pest_case_id: int | None = None, intervention_id: int | 
     return db.session.scalars(statement).all()
 
 
-def list_due_interventions():
+def list_due_interventions(user=None):
     statement = (
         select(Intervention)
         .join(PestCase, PestCase.id == Intervention.pest_case_id)
@@ -128,7 +138,7 @@ def list_due_interventions():
         )
         .order_by(Intervention.follow_up_due_on, Intervention.id)
     )
-    return db.session.scalars(statement).all()
+    return db.session.scalars(apply_intervention_scope(statement, user)).all()
 
 
 def commit_follow_up_changes() -> None:
@@ -381,7 +391,7 @@ def get_follow_up(follow_up_id: int):
         db.session.rollback()
         current_app.logger.error("Follow-up lookup failed.")
         return auth_error("Follow-up service unavailable.", 503)
-    if follow_up is None:
+    if follow_up is None or not can_view_follow_up(g.current_user, follow_up):
         return auth_error("Follow-up not found.", 404)
     return jsonify(
         {"data": {"follow_up": _follow_up_detail(follow_up)}, "message": "Follow-up retrieved."}

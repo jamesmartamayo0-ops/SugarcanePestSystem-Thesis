@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.auth import auth_error, login_required, roles_required
 from app.extensions import db
 from app.models import Farm, Farmer
+from app.scoping import apply_farm_scope
 
 farms_bp = Blueprint("farms", __name__, url_prefix="/api/v1/farms")
 
@@ -45,15 +46,17 @@ def _farm_public(farm: Farm) -> dict:
     }
 
 
-def list_all_farms(farmer_id: int | None = None):
-    statement = select(Farm).order_by(Farm.id)
+def list_all_farms(farmer_id: int | None = None, user=None):
+    statement = apply_farm_scope(select(Farm).order_by(Farm.id), user)
     if farmer_id is not None:
         statement = statement.where(Farm.farmer_id == farmer_id)
     return db.session.scalars(statement).all()
 
 
-def get_farm_by_id(farm_id: int):
-    return db.session.get(Farm, farm_id)
+def get_farm_by_id(farm_id: int, user=None):
+    return db.session.scalar(
+        apply_farm_scope(select(Farm).where(Farm.id == farm_id), user)
+    )
 
 
 def get_farmer_by_id(farmer_id: int):

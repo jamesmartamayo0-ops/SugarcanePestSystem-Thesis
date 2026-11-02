@@ -620,7 +620,7 @@ export default function InterventionsPage() {
               </div>
               <div className="gov-field">
                 <label htmlFor="assigned_to_user_id" className="gov-label">
-                  Assigned technician <span className="gov-required" aria-hidden="true">*</span>
+                  Assigned Agriculture Technician <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="assigned_to_user_id"
@@ -630,7 +630,7 @@ export default function InterventionsPage() {
                   className="gov-select"
                 >
                   <option value="" disabled>
-                    Select a technician
+                    Select an Agriculture Technician
                   </option>
                   {technicians.map((tech) => (
                     <option key={tech.id} value={tech.id}>
@@ -704,7 +704,7 @@ export default function InterventionsPage() {
                 className="gov-input w-24"
               />
               <label htmlFor="technician_filter" className="gov-label">
-                Technician
+                Agriculture Technician
               </label>
               <select
                 id="technician_filter"
@@ -716,7 +716,7 @@ export default function InterventionsPage() {
                 }}
                 className="gov-select"
               >
-                <option value="all">All technicians</option>
+                <option value="all">All Agriculture Technicians</option>
                 {technicians.map((tech) => (
                   <option key={tech.id} value={tech.id}>
                     {tech.full_name}
@@ -752,7 +752,7 @@ export default function InterventionsPage() {
                   <tr>
                     <th scope="col">Intervention</th>
                     <th scope="col">Case / Farm / Farmer</th>
-                    <th scope="col">Technician</th>
+                    <th scope="col">Agriculture Technician</th>
                     <th scope="col">Status</th>
                     <th scope="col">Follow-up</th>
                     <th scope="col">Action</th>
@@ -858,7 +858,7 @@ export default function InterventionsPage() {
                     <dd className="gov-detail-value">{detail.method_category}</dd>
                   </div>
                   <div>
-                    <dt className="gov-detail-label">Assigned technician</dt>
+                    <dt className="gov-detail-label">Assigned Agriculture Technician</dt>
                     <dd className="gov-detail-value">
                       {detail.assigned_to?.full_name ?? `#${detail.assigned_to_user_id}`}
                     </dd>
@@ -962,7 +962,7 @@ export default function InterventionsPage() {
                               htmlFor="plan_technician"
                               className="gov-label"
                             >
-                              Technician (optional)
+                              Agriculture Technician (optional)
                             </label>
                             <select
                               id="plan_technician"
@@ -1087,7 +1087,7 @@ export default function InterventionsPage() {
                     </div>
                   ) : (
                     <p role="status" className="gov-timeline-note">
-                      Only an administrator or the assigned technician can edit or
+                      Only an administrator or the assigned agriculture technician can edit or
                       complete this intervention.
                     </p>
                   )

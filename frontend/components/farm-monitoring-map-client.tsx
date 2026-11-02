@@ -73,7 +73,14 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                 <strong>{farm.plot_identifier}</strong>
                 <span>Farmer: {farm.farmer.full_name}</span>
                 <span>Area: {formatArea(farm.area_hectares)}</span>
-                <span>Workflow: {presentation.label}</span>
+                <span className="gov-map-tooltip-status">
+                  <span
+                    className="gov-map-legend-dot"
+                    style={{ backgroundColor: presentation.color }}
+                    aria-hidden="true"
+                  />
+                  {presentation.label}
+                </span>
                 {farm.case && <span>Pest: {farm.case.pest_name}</span>}
               </div>
             </Tooltip>
@@ -84,7 +91,19 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                   <div><dt>Farmer</dt><dd>{farm.farmer.full_name}</dd></div>
                   <div><dt>Barangay</dt><dd>{farm.barangay}</dd></div>
                   <div><dt>Farm area</dt><dd>{formatArea(farm.area_hectares)}</dd></div>
-                  <div><dt>Workflow state</dt><dd>{presentation.label}</dd></div>
+                  <div>
+                    <dt>Workflow state</dt>
+                    <dd>
+                      <span className="gov-map-status-chip">
+                        <span
+                          className="gov-map-legend-dot"
+                          style={{ backgroundColor: presentation.color }}
+                          aria-hidden="true"
+                        />
+                        {presentation.label}
+                      </span>
+                    </dd>
+                  </div>
                   {farm.case && (
                     <>
                       <div><dt>Pest</dt><dd>{farm.case.pest_name}</dd></div>

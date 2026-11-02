@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models import FollowUp, Intervention, PestCase, PestCaseStatus
 from app.models.intervention import manila_today
 from app.routes.pest_cases import list_all_pest_cases
+from app.scoping import apply_intervention_scope
 
 reports_bp = Blueprint("reports", __name__, url_prefix="/api/v1/reports")
 
@@ -80,7 +81,11 @@ def get_interventions_for_cases(case_ids: list) -> list:
     if not case_ids:
         return []
     return db.session.scalars(
-        select(Intervention).where(Intervention.pest_case_id.in_(case_ids)).order_by(Intervention.id)
+        apply_intervention_scope(
+            select(Intervention)
+            .where(Intervention.pest_case_id.in_(case_ids))
+            .order_by(Intervention.id)
+        )
     ).all()
 
 

@@ -18,6 +18,7 @@ from app.models import (
     normalize_scheduled_for,
     normalize_validated_area,
 )
+from app.scoping import apply_inspection_scope, can_view_inspection
 
 inspections_bp = Blueprint("inspections", __name__, url_prefix="/api/v1/inspections")
 
@@ -72,8 +73,10 @@ def get_inspection_by_case_for_update(case_id: int):
     )
 
 
-def list_all_inspections(pest_case_id: int | None = None, assigned_to: int | None = None):
-    statement = select(Inspection).order_by(Inspection.id)
+def list_all_inspections(
+    pest_case_id: int | None = None, assigned_to: int | None = None, user=None
+):
+    statement = apply_inspection_scope(select(Inspection).order_by(Inspection.id), user)
     if pest_case_id is not None:
         statement = statement.where(Inspection.pest_case_id == pest_case_id)
     if assigned_to is not None:
@@ -308,7 +311,7 @@ def get_inspection(inspection_id: int):
         db.session.rollback()
         current_app.logger.error("Inspection lookup failed.")
         return auth_error("Inspection service unavailable.", 503)
-    if inspection is None:
+    if inspection is None or not can_view_inspection(g.current_user, inspection):
         return auth_error("Inspection not found.", 404)
     return jsonify(
         {"data": {"inspection": _inspection_detail(inspection)}, "message": "Inspection retrieved."}
@@ -340,7 +343,7 @@ def reschedule_inspection(inspection_id: int):
         db.session.rollback()
         current_app.logger.error("Inspection lookup failed.")
         return auth_error("Inspection service unavailable.", 503)
-    if prelim is None:
+    if prelim is None or not can_view_inspection(g.current_user, prelim):
         return auth_error("Inspection not found.", 404)
     case_id = prelim.pest_case_id
 
@@ -366,7 +369,11 @@ def reschedule_inspection(inspection_id: int):
     if case is None:
         db.session.rollback()
         return auth_error("Pest case not found.", 404)
-    if inspection is None or inspection.pest_case_id != case.id:
+    if (
+        inspection is None
+        or inspection.pest_case_id != case.id
+        or not can_view_inspection(g.current_user, inspection)
+    ):
         db.session.rollback()
         return auth_error("Inspection not found.", 404)
     if case.status != PestCaseStatus.INSPECTION_SCHEDULED.value:

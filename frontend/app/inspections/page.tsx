@@ -493,7 +493,7 @@ export default function InspectionsPage() {
                   htmlFor="assigned_to_user_id"
                   className="gov-label"
                 >
-                  Assigned technician <span className="gov-required" aria-hidden="true">*</span>
+                  Assigned Agriculture Technician <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="assigned_to_user_id"
@@ -503,7 +503,7 @@ export default function InspectionsPage() {
                   className="gov-select"
                 >
                   <option value="" disabled>
-                    Select a technician
+                    Select an Agriculture Technician
                   </option>
                   {technicians.map((tech) => (
                     <option key={tech.id} value={tech.id}>
@@ -558,7 +558,7 @@ export default function InspectionsPage() {
                 htmlFor="technician_filter"
                 className="gov-label"
               >
-                Technician
+                Agriculture Technician
               </label>
               <select
                 id="technician_filter"
@@ -570,7 +570,7 @@ export default function InspectionsPage() {
                 }}
                 className="gov-select"
               >
-                <option value="all">All technicians</option>
+                <option value="all">All Agriculture Technicians</option>
                 {technicians.map((tech) => (
                   <option key={tech.id} value={tech.id}>
                     {tech.full_name}
@@ -606,7 +606,7 @@ export default function InspectionsPage() {
                   <tr>
                     <th scope="col">Inspection</th>
                     <th scope="col">Case / Farm / Farmer</th>
-                    <th scope="col">Technician</th>
+                    <th scope="col">Agriculture Technician</th>
                     <th scope="col">Scheduled</th>
                     <th scope="col">Status</th>
                     <th scope="col">Action</th>
@@ -698,7 +698,7 @@ export default function InspectionsPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="gov-detail-label">Assigned technician</dt>
+                    <dt className="gov-detail-label">Assigned Agriculture Technician</dt>
                     <dd className="gov-detail-value">
                       {detail.assigned_to?.full_name ?? `#${detail.assigned_to_user_id}`}
                     </dd>
@@ -756,7 +756,7 @@ export default function InspectionsPage() {
                             htmlFor="reassign_technician"
                             className="gov-label"
                           >
-                            New technician (optional)
+                            New Agriculture Technician (optional)
                           </label>
                           <select
                             id="reassign_technician"
@@ -876,7 +876,7 @@ export default function InspectionsPage() {
                       </div>
                     ) : (
                       <p role="status" className="gov-empty-state">
-                        Only an administrator or the assigned technician can record
+                        Only an administrator or the assigned agriculture technician can record
                         findings for this inspection.
                       </p>
                     )}

@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 
 import {
   FARM_MAP_LEGEND,
+  farmMapFilterCounts,
   farmsForMap,
   type FarmMapFarm,
   type FarmMapFilter,
@@ -23,10 +24,10 @@ const FarmMonitoringMapClient = dynamic(
 );
 
 const FILTERS: { value: FarmMapFilter; label: string }[] = [
-  { value: "ALL", label: "All Farms" },
-  { value: "ACTIVE", label: "Active Cases" },
-  { value: "NEEDS_ATTENTION", label: "Needs Attention" },
-  { value: "TERMINAL", label: "Closed / Terminal" },
+  { value: "ALL", label: "All farms" },
+  { value: "ACTIVE", label: "Active cases" },
+  { value: "NEEDS_ATTENTION", label: "Needs attention" },
+  { value: "TERMINAL", label: "Closed / not confirmed" },
 ];
 
 class MonitoringMapErrorBoundary extends Component<
@@ -53,27 +54,37 @@ class MonitoringMapErrorBoundary extends Component<
 export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
   const [filter, setFilter] = useState<FarmMapFilter>("ALL");
   const mapped = useMemo(() => farmsForMap(farms, filter), [farms, filter]);
+  const counts = useMemo(() => farmMapFilterCounts(farms), [farms]);
   const unmapped = useMemo(() => farms.filter((farm) => farm.location === null), [farms]);
 
   return (
     <>
-      <div className="gov-map-toolbar" aria-label="Farm map filters">
-        {FILTERS.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className={`gov-map-filter${filter === item.value ? " gov-map-filter-active" : ""}`}
-            aria-pressed={filter === item.value}
-            onClick={() => setFilter(item.value)}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="gov-map-toolbar">
+        <div className="gov-map-filter-group" role="group" aria-label="Farm map filters">
+          {FILTERS.map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              className={`gov-map-filter${filter === item.value ? " gov-map-filter-active" : ""}`}
+              aria-pressed={filter === item.value}
+              onClick={() => setFilter(item.value)}
+            >
+              <span>{item.label}</span>
+              <span className="gov-map-filter-count" aria-hidden="true">
+                {counts[item.value]}
+              </span>
+            </button>
+          ))}
+        </div>
+        <p className="gov-map-filter-summary" role="status">
+          Showing {mapped.length} of {counts.ALL} mapped{" "}
+          {counts.ALL === 1 ? "farm" : "farms"}.
+        </p>
       </div>
 
       {mapped.length === 0 ? (
         <div className="gov-monitoring-map-message" role="status">
-          {farms.some((farm) => farm.location !== null)
+          {counts.ALL > 0
             ? "No mapped farms match this filter."
             : "No farms have an approximate map location yet."}
         </div>
@@ -84,8 +95,14 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
       )}
 
       <div className="gov-map-supporting-grid">
-        <section aria-labelledby="farm-map-legend-heading">
-          <h3 id="farm-map-legend-heading" className="gov-map-subheading">Map legend</h3>
+        <section aria-labelledby="farm-map-status-heading">
+          <h3 id="farm-map-status-heading" className="gov-map-subheading">
+            Status guide
+          </h3>
+          <p className="gov-map-help">
+            Marker colors reflect the latest authorized workflow state for each
+            farm. Select a marker to review its farm and case details.
+          </p>
           <ul className="gov-map-legend">
             {FARM_MAP_LEGEND.map((item) => (
               <li key={item.legendLabel}>
@@ -94,7 +111,7 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
                   style={{ backgroundColor: item.color }}
                   aria-hidden="true"
                 />
-                {item.legendLabel}
+                <span>{item.legendLabel}</span>
               </li>
             ))}
           </ul>
@@ -103,15 +120,20 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
           <h3 id="unmapped-farms-heading" className="gov-map-subheading">
             Unmapped farms ({unmapped.length})
           </h3>
+          <p className="gov-map-help">
+            Farms without an approximate location remain in the registry but do
+            not appear as map markers.
+          </p>
           {unmapped.length === 0 ? (
-            <p className="gov-map-help">All registered farms have map locations.</p>
+            <p className="gov-map-help">All authorized farms have map locations.</p>
           ) : (
             <details className="gov-unmapped-details">
               <summary>Show farms without locations</summary>
               <ul>
                 {unmapped.map((farm) => (
                   <li key={farm.id}>
-                    {farm.plot_identifier} — {farm.farmer.full_name}
+                    {farm.plot_identifier} — {farm.farmer.full_name} (
+                    {farm.barangay})
                   </li>
                 ))}
               </ul>

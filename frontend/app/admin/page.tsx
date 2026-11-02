@@ -269,7 +269,7 @@ export default function AdminPage() {
                 defaultValue="TECHNICIAN"
                 className="gov-select"
               >
-                <option value="TECHNICIAN">Field Technician</option>
+                <option value="TECHNICIAN">Agriculture Technician</option>
                 <option value="ADMIN">Administrator</option>
               </select>
             </div>

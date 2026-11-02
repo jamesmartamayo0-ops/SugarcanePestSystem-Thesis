@@ -36,7 +36,7 @@ const NAV_ITEMS: NavItem[] = [
  * are unchanged everywhere else.
  */
 export function roleDisplayName(role: UserRole): string {
-  return role === "ADMIN" ? "Administrator" : "Field Technician";
+  return role === "ADMIN" ? "Administrator" : "Agriculture Technician";
 }
 
 function isNavActive(pathname: string, href: string): boolean {
