@@ -334,25 +334,25 @@ export default function FarmsPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -366,9 +366,11 @@ export default function FarmsPage() {
         <p className="gov-page-description">
           Manage registered sugarcane farm and plot records.
         </p>
-        <Link href="/pest-cases" className="gov-button gov-button-secondary mt-3">
-          Report pest case
-        </Link>
+        <div className="gov-page-links">
+          <Link href="/pest-cases" className="gov-button gov-button-secondary">
+            Report pest case
+          </Link>
+        </div>
       </header>
 
         <section aria-label="Add farm" className="gov-card gov-record-section">
@@ -479,7 +481,14 @@ export default function FarmsPage() {
 
         <section aria-label="Farm records" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
-            <h2 className="gov-record-title">Farm records</h2>
+            <div>
+              <h2 className="gov-record-title">Farm records</h2>
+              {!loadingList && listError === null && (
+                <p className="gov-record-meta">
+                  {farms.length} {farms.length === 1 ? "farm" : "farms"} shown
+                </p>
+              )}
+            </div>
             <div className="gov-record-controls">
               <label htmlFor="filter_farmer" className="gov-label">
                 Farmer
@@ -521,28 +530,41 @@ export default function FarmsPage() {
             </p>
           ) : farms.length === 0 ? (
             <p role="status" className="gov-empty-state">
-              No farm records found. Add the first farm above.
+              No farm records available. Add the first farm above.
             </p>
           ) : (
             <div className="gov-table-wrap mt-4">
               <table className="gov-table min-w-[720px]">
                 <thead>
                   <tr>
-                    <th scope="col">Farm/plot</th>
+                    <th scope="col">Farm / plot</th>
                     <th scope="col">Barangay</th>
-                    <th scope="col">Area (ha)</th>
+                    <th scope="col" className="gov-cell-num">Area (ha)</th>
                     <th scope="col">Farmer</th>
-                    <th scope="col">Action</th>
+                    <th scope="col">GIS status</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {farms.map((entry) => (
                     <tr key={entry.id}>
-                      <td>{entry.plot_identifier}</td>
+                      <td className="gov-cell-primary">{entry.plot_identifier}</td>
                       <td>{entry.barangay}</td>
-                      <td>{entry.area_hectares.toFixed(2)}</td>
+                      <td className="gov-cell-num">{entry.area_hectares.toFixed(2)}</td>
                       <td>{entry.farmer.full_name}</td>
                       <td>
+                        {entry.latitude !== null && entry.longitude !== null ? (
+                          <>
+                            <span className="gov-status-badge gov-tone-success">Mapped</span>
+                            <span className="gov-cell-meta">
+                              {entry.latitude.toFixed(6)}, {entry.longitude.toFixed(6)}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="gov-status-badge gov-tone-neutral">Not mapped</span>
+                        )}
+                      </td>
+                      <td className="gov-col-actions">
                         <div className="gov-table-actions">
                           <button
                             type="button"

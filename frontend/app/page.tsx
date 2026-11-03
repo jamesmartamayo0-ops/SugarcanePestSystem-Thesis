@@ -1,31 +1,31 @@
 import Link from "next/link";
 
 import SystemStatus from "@/components/system-status";
+import { OFFICE_NAME, SYSTEM_NAME } from "@/lib/branding";
 
 export default function Home() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 py-12">
-      <div className="w-full max-w-3xl rounded-2xl border border-slate-200 bg-white p-8 shadow-sm sm:p-12">
-        <p className="gov-office-name text-sm font-semibold uppercase tracking-wide">
-          Bais City Agriculturist&apos;s Office
+    <main className="gov-login">
+      <div className="gov-card gov-login-card">
+        <header className="gov-login-brand">
+          <div className="gov-logo-slot gov-logo-slot--login" aria-hidden="true" />
+          <p className="gov-login-office">{OFFICE_NAME}</p>
+        </header>
+
+        <h1 className="gov-login-title">{SYSTEM_NAME}</h1>
+        <p className="gov-login-lead">
+          Record and track sugarcane pest cases from field validation through
+          intervention and follow-up.
         </p>
 
-        <h1 className="mt-5 text-3xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-4xl">
-          Sugarcane Pest Inspection and Intervention Workflow Management System
-        </h1>
+        <div className="gov-login-body">
+          <Link href="/login" className="gov-button gov-button-primary gov-button-block">
+            Sign in
+          </Link>
+          <SystemStatus />
+        </div>
 
-        <p className="mt-5 text-base text-slate-600">
-          Frontend foundation ready.
-        </p>
-
-        <Link
-          href="/login"
-          className="mt-6 inline-flex rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
-        >
-          Sign in
-        </Link>
-
-        <SystemStatus />
+        <p className="gov-login-footnote">Authorized personnel only.</p>
       </div>
     </main>
   );

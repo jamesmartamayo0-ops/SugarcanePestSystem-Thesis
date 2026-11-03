@@ -149,25 +149,25 @@ export default function ReportsPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -345,6 +345,7 @@ export default function ReportsPage() {
               </div>
             </section>
 
+            <div className="gov-report-columns">
             <section aria-label="Cases by status" className="gov-card gov-record-section">
               <h2 className="gov-record-title">Cases by status</h2>
               <dl className="gov-report-list">
@@ -359,6 +360,7 @@ export default function ReportsPage() {
               </dl>
             </section>
 
+            <div className="gov-report-stack">
             <section aria-label="Follow-up summary" className="gov-card gov-record-section">
               <h2 className="gov-record-title">Follow-up summary</h2>
               <dl className="gov-report-list">
@@ -411,6 +413,9 @@ export default function ReportsPage() {
               </dl>
             </section>
 
+              </div>
+          </div>
+
             <section aria-label="Report cases" className="gov-card gov-record-section">
               <h2 className="gov-record-title">Report cases</h2>
               {report.cases.length === 0 ? (
@@ -433,14 +438,14 @@ export default function ReportsPage() {
                         <tr key={entry.case_id}>
                           <td>
                             #{entry.case_id} — {entry.pest_name}
-                            <span className="block text-xs text-slate-600">
+                            <span className="gov-cell-meta">
                               Reported {formatRecordDate(entry.reported_at)} ·{" "}
                               {entry.reported_area_hectares.toFixed(2)} ha
                             </span>
                           </td>
                           <td>
                             {entry.farmer ?? "—"}
-                            <span className="block text-xs text-slate-600">
+                            <span className="gov-cell-meta">
                               {entry.farm ?? "—"} · {entry.barangay ?? "—"}
                             </span>
                           </td>
@@ -449,7 +454,7 @@ export default function ReportsPage() {
                             {entry.latest_intervention_cycle === null
                               ? "—"
                               : `Cycle ${entry.latest_intervention_cycle}`}
-                            <span className="block text-xs text-slate-600">
+                            <span className="gov-cell-meta">
                               {workflowLabel(entry.latest_follow_up_outcome ?? "No recorded follow-up")}
                             </span>
                           </td>

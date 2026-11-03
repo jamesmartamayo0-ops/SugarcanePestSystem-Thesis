@@ -68,7 +68,7 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
               fillOpacity: 0.95,
             }}
           >
-            <Tooltip sticky>
+            <Tooltip sticky className="gov-map-tooltip-shell">
               <div className="gov-map-tooltip">
                 <strong>{farm.plot_identifier}</strong>
                 <span>Farmer: {farm.farmer.full_name}</span>
@@ -84,7 +84,7 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                 {farm.case && <span>Pest: {farm.case.pest_name}</span>}
               </div>
             </Tooltip>
-            <Popup maxWidth={320} minWidth={230}>
+            <Popup maxWidth={320} minWidth={230} className="gov-map-popup-shell">
               <div className="gov-map-popup">
                 <h3>{farm.plot_identifier}</h3>
                 <dl>
@@ -115,8 +115,8 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                 </dl>
                 {farm.case && (
                   <div className="gov-map-popup-actions">
-                    <a href={`/pest-cases/${farm.case.id}#case-summary`}>View Case</a>
-                    <a href={`/pest-cases/${farm.case.id}#timeline`}>View Timeline</a>
+                    <a href={`/pest-cases/${farm.case.id}#case-summary`}>View case</a>
+                    <a href={`/pest-cases/${farm.case.id}#timeline`}>View timeline</a>
                   </div>
                 )}
               </div>

@@ -171,25 +171,25 @@ export default function AdminPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -198,8 +198,8 @@ export default function AdminPage() {
 
   if (auth.user.role !== "ADMIN") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to dashboard...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to dashboard...</p>
       </main>
     );
   }
@@ -324,7 +324,7 @@ export default function AdminPage() {
                     <th scope="col">Full name</th>
                     <th scope="col">Role</th>
                     <th scope="col">Status</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -342,17 +342,17 @@ export default function AdminPage() {
                           )}
                         </td>
                         <td>{entry.full_name}</td>
-                        <td><span className="gov-status-badge">{roleDisplayName(entry.role)}</span></td>
+                        <td><span className={`gov-status-badge ${entry.role === "ADMIN" ? "gov-role-admin" : "gov-role-technician"}`}>{roleDisplayName(entry.role)}</span></td>
                         <td>
                           <span
                             className={entry.is_active
-                                ? "gov-status-badge gov-status-closed"
-                                : "gov-status-badge gov-status-not-confirmed"}
+                                ? "gov-status-badge gov-tone-success"
+                                : "gov-status-badge gov-tone-neutral"}
                           >
                             {entry.is_active ? "Active" : "Inactive"}
                           </span>
                         </td>
-                        <td>
+                        <td className="gov-col-actions">
                           <button
                             type="button"
                             onClick={() => void handleToggle(entry)}
@@ -364,7 +364,11 @@ export default function AdminPage() {
                                   ? `Deactivate ${entry.username}`
                                   : `Activate ${entry.username}`
                             }
-                            className="gov-button gov-button-secondary gov-button-compact"
+                            className={
+                              entry.is_active
+                                ? "gov-button gov-button-danger gov-button-compact"
+                                : "gov-button gov-button-secondary gov-button-compact"
+                            }
                           >
                             {busy
                               ? "Saving..."

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
-import { workflowLabel } from "@/lib/presentation";
+import { workflowBadgeClass, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   TimelineRequestError,
@@ -14,6 +14,18 @@ import {
 
 function categoryBadge(category: string): string {
   return `gov-event-label gov-event-${category.toLowerCase().replaceAll("_", "-")}`;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  CASE: "Case",
+  INSPECTION: "Inspection",
+  INTERVENTION: "Intervention",
+  FOLLOW_UP: "Follow-up",
+  CLOSURE: "Closure",
+};
+
+function categoryLabel(category: string): string {
+  return Object.hasOwn(CATEGORY_LABELS, category) ? CATEGORY_LABELS[category] : category;
 }
 
 // Rendering only: date-only values retain their calendar day; timestamps use Manila time.
@@ -98,25 +110,25 @@ export default function PestCaseTimelinePage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -129,7 +141,7 @@ export default function PestCaseTimelinePage() {
         <Link href="/pest-cases" className="gov-activity-link">
           Back to pest cases
         </Link>
-        <h1 className="gov-page-title mt-3">Case Timeline</h1>
+        <h1 className="gov-page-title">Case Timeline</h1>
       </header>
 
         {validId === null ? (
@@ -151,7 +163,7 @@ export default function PestCaseTimelinePage() {
                 <h2 className="gov-record-title">
                   Case #{data.pest_case.id} — {data.pest_case.pest_name}
                 </h2>
-                <span className={`gov-status-badge gov-status-${data.pest_case.status.toLowerCase().replaceAll("_", "-")}`}>
+                <span className={workflowBadgeClass(data.pest_case.status)}>
                   {workflowLabel(data.pest_case.status)}
                 </span>
               </div>
@@ -209,7 +221,7 @@ export default function PestCaseTimelinePage() {
                         <span
                           className={categoryBadge(event.category)}
                         >
-                          {event.category}
+                          {categoryLabel(event.category)}
                           {event.cycle !== null ? ` · Cycle ${event.cycle}` : ""}
                         </span>
                         <span className="gov-timeline-date">

@@ -18,16 +18,16 @@ const initialStatus: SystemStatusState = {
   message: "Checking local services...",
 };
 
-function statusClass(status: DisplayStatus | "Running") {
+function statusToneClass(status: DisplayStatus | "Running") {
   if (status === "Running" || status === "Connected") {
-    return "bg-emerald-100 text-emerald-800";
+    return "gov-tone-success";
   }
 
   if (status === "Unavailable") {
-    return "bg-amber-100 text-amber-800";
+    return "gov-tone-warning";
   }
 
-  return "bg-slate-200 text-slate-700";
+  return "gov-tone-neutral";
 }
 
 export default function SystemStatus() {
@@ -74,23 +74,17 @@ export default function SystemStatus() {
   ];
 
   return (
-    <section aria-label="System status" className="mt-10">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-        System status
-      </h2>
-      <dl className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-slate-50 px-5">
+    <section aria-label="System status" className="gov-system-status">
+      <h2 className="gov-system-status-title">System status</h2>
+      <dl className="gov-system-status-list">
         {rows.map(({ label, value }) => (
-          <div key={label} className="flex items-center justify-between gap-4 py-4">
-            <dt className="font-medium text-slate-700">{label}</dt>
-            <dd
-              className={`rounded-full px-3 py-1 text-sm font-semibold ${statusClass(value)}`}
-            >
-              {value}
-            </dd>
+          <div key={label} className="gov-system-status-row">
+            <dt>{label}</dt>
+            <dd className={`gov-status-badge ${statusToneClass(value)}`}>{value}</dd>
           </div>
         ))}
       </dl>
-      <p role="status" className="mt-4 text-sm text-slate-600">
+      <p role="status" className="gov-field-help">
         {status.message}
       </p>
     </section>

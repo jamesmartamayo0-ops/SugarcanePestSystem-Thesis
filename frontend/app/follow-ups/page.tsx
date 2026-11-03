@@ -22,15 +22,12 @@ import {
 
 function dueBadge(state: string | null): string {
   if (state === "OVERDUE") {
-    return "gov-status-badge gov-status-reintervention-required";
+    return "gov-status-badge gov-due-overdue";
   }
   if (state === "DUE_TODAY") {
-    return "gov-status-badge gov-status-follow-up-due";
+    return "gov-status-badge gov-due-today";
   }
-  if (state === "UPCOMING") {
-    return "gov-status-badge";
-  }
-  return "gov-status-badge";
+  return "gov-status-badge gov-due-upcoming";
 }
 
 function outcomeBadge(outcome: string): string {
@@ -323,25 +320,25 @@ export default function FollowUpsPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -363,7 +360,7 @@ export default function FollowUpsPage() {
           explicitly selected and never inferred. Resolved cases close; cases
           needing more work return for reintervention. History is preserved.
         </p>
-        <div className="gov-record-controls mt-3">
+        <div className="gov-page-links">
           <Link
             href="/pest-cases"
             className="gov-activity-link"
@@ -418,7 +415,7 @@ export default function FollowUpsPage() {
                     <th scope="col">Agriculture Technician</th>
                     <th scope="col">Method / Performed</th>
                     <th scope="col">Due</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -428,7 +425,7 @@ export default function FollowUpsPage() {
                       <tr key={entry.intervention_id}>
                         <td>
                           #{entry.pest_case_id} — {entry.pest_case?.pest_name ?? "—"}
-                          <span className="block text-xs text-slate-600">
+                          <span className="gov-cell-meta">
                             {entry.pest_case?.farm?.plot_identifier ?? "—"} —{" "}
                             {entry.pest_case?.farm?.farmer?.full_name ?? "—"}
                           </span>
@@ -438,7 +435,7 @@ export default function FollowUpsPage() {
                         </td>
                         <td>
                           {entry.method_category}
-                          <span className="block text-xs text-slate-600">
+                          <span className="gov-cell-meta">
                             Performed {entry.performed_on ?? "—"}
                           </span>
                         </td>
@@ -450,7 +447,7 @@ export default function FollowUpsPage() {
                             {dueBadgeLabel(localState)}
                           </span>
                         </td>
-                        <td>
+                        <td className="gov-col-actions">
                           {canRecord(entry) ? (
                             <button
                               type="button"
@@ -468,7 +465,7 @@ export default function FollowUpsPage() {
                                 : "Record"}
                             </button>
                           ) : (
-                            <span className="text-xs text-slate-500">
+                            <span className="gov-cell-meta">
                               Assigned Agriculture Technician only
                             </span>
                           )}
@@ -510,13 +507,13 @@ export default function FollowUpsPage() {
                 <legend className="gov-label">
                   Pest still observed <span className="gov-required" aria-hidden="true">*</span>
                 </legend>
-                <div className="mt-2 flex gap-4">
-                  <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                    <input type="radio" name="pest_observed" value="yes" required className="h-4 w-4" />
+                <div className="gov-choice-group">
+                  <label className="gov-choice">
+                    <input type="radio" name="pest_observed" value="yes" required />
                     Yes
                   </label>
-                  <label className="inline-flex items-center gap-2 text-sm text-slate-700">
-                    <input type="radio" name="pest_observed" value="no" required className="h-4 w-4" />
+                  <label className="gov-choice">
+                    <input type="radio" name="pest_observed" value="no" required />
                     No
                   </label>
                 </div>
@@ -538,13 +535,13 @@ export default function FollowUpsPage() {
               </div>
               <fieldset className="gov-radio-group">
                 <legend className="gov-label">Outcome (required) <span className="gov-required" aria-hidden="true">*</span></legend>
-                <div className="mt-2 grid gap-2">
-                  <label className="inline-flex items-start gap-2 text-sm text-slate-700">
-                    <input type="radio" name="outcome" value="RESOLVED" required className="mt-1 h-4 w-4" />
+                <div className="gov-choice-group gov-choice-group--stack">
+                  <label className="gov-choice">
+                    <input type="radio" name="outcome" value="RESOLVED" required />
                     Resolved / No further intervention required
                   </label>
-                  <label className="inline-flex items-start gap-2 text-sm text-slate-700">
-                    <input type="radio" name="outcome" value="REINTERVENTION_REQUIRED" required className="mt-1 h-4 w-4" />
+                  <label className="gov-choice">
+                    <input type="radio" name="outcome" value="REINTERVENTION_REQUIRED" required />
                     Further intervention required
                   </label>
                 </div>
@@ -602,7 +599,7 @@ export default function FollowUpsPage() {
                 }}
                 placeholder="All"
                 inputMode="numeric"
-                className="gov-input w-24"
+                className="gov-input gov-input-narrow"
               />
               <label htmlFor="follow_outcome_filter" className="gov-label">
                 Outcome
@@ -647,7 +644,7 @@ export default function FollowUpsPage() {
                     <th scope="col">Follow-up</th>
                     <th scope="col">Observation</th>
                     <th scope="col">Outcome / Case</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -655,18 +652,18 @@ export default function FollowUpsPage() {
                     <tr key={entry.id}>
                       <td>
                         #{entry.id} — {cycleLabel(history, entry)}
-                        <span className="block text-xs text-slate-600">
+                        <span className="gov-cell-meta">
                           Recorded {formatRecordDate(entry.created_at ?? null)} by{" "}
                           {entry.recorded_by?.full_name ?? `#${entry.recorded_by_user_id}`}
                         </span>
-                        <span className="mt-1 block text-xs text-slate-600">
+                        <span className="gov-cell-meta">
                           {entry.assessment_notes}
                         </span>
                       </td>
                       <td>
                         {entry.pest_observed ? "Pest seen" : "No pest seen"} —{" "}
                         {entry.observed_on}
-                        <span className="block text-xs text-slate-600">
+                        <span className="gov-cell-meta">
                           Area{" "}
                           {entry.observed_affected_area_hectares === null
                             ? "—"
@@ -674,18 +671,22 @@ export default function FollowUpsPage() {
                         </span>
                       </td>
                       <td>
-                        <span
-                          className={outcomeBadge(entry.outcome)}
-                        >
-                          {workflowLabel(entry.outcome)}
-                        </span>
-                        <span
-                          className={`ml-2 ${caseBadge(entry.pest_case?.status ?? "")}`}
-                        >
-                          {workflowLabel(entry.pest_case?.status ?? "—")}
+                        <span className="gov-badge-pair">
+                          <span className="gov-badge-group">
+                            <span className="gov-badge-pair-label">Outcome</span>
+                            <span className={outcomeBadge(entry.outcome)}>
+                              {workflowLabel(entry.outcome)}
+                            </span>
+                          </span>
+                          <span className="gov-badge-group">
+                            <span className="gov-badge-pair-label">Case</span>
+                            <span className={caseBadge(entry.pest_case?.status ?? "")}>
+                              {workflowLabel(entry.pest_case?.status ?? "—")}
+                            </span>
+                          </span>
                         </span>
                       </td>
-                      <td>
+                      <td className="gov-col-actions">
                         <button
                           type="button"
                           onClick={() => void openDetail(entry.id)}

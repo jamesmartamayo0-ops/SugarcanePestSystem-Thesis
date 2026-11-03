@@ -77,8 +77,7 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
           ))}
         </div>
         <p className="gov-map-filter-summary" role="status">
-          Showing {mapped.length} of {counts.ALL} mapped{" "}
-          {counts.ALL === 1 ? "farm" : "farms"}.
+          Showing {mapped.length} of {counts.ALL} mapped {counts.ALL === 1 ? "farm" : "farms"}.
         </p>
       </div>
 
@@ -86,7 +85,7 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
         <div className="gov-monitoring-map-message" role="status">
           {counts.ALL > 0
             ? "No mapped farms match this filter."
-            : "No farms have an approximate map location yet."}
+            : "No mapped farms available. Farms appear here once an approximate location is recorded."}
         </div>
       ) : (
         <MonitoringMapErrorBoundary key={filter}>
@@ -100,8 +99,8 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
             Status guide
           </h3>
           <p className="gov-map-help">
-            Marker colors reflect the latest authorized workflow state for each
-            farm. Select a marker to review its farm and case details.
+            Marker colours show the latest authorized workflow state for each farm.
+            Select a marker to review its farm and case details.
           </p>
           <ul className="gov-map-legend">
             {FARM_MAP_LEGEND.map((item) => (
@@ -121,8 +120,8 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
             Unmapped farms ({unmapped.length})
           </h3>
           <p className="gov-map-help">
-            Farms without an approximate location remain in the registry but do
-            not appear as map markers.
+            Farms without an approximate location remain in the registry but do not
+            appear as markers.
           </p>
           {unmapped.length === 0 ? (
             <p className="gov-map-help">All authorized farms have map locations.</p>
@@ -132,8 +131,7 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
               <ul>
                 {unmapped.map((farm) => (
                   <li key={farm.id}>
-                    {farm.plot_identifier} — {farm.farmer.full_name} (
-                    {farm.barangay})
+                    {farm.plot_identifier} — {farm.farmer.full_name} ({farm.barangay})
                   </li>
                 ))}
               </ul>

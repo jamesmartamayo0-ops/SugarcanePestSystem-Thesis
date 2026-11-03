@@ -215,25 +215,25 @@ export default function FarmersPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -318,7 +318,12 @@ export default function FarmersPage() {
 
         <section aria-label="Farmer records" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
-            <h2 className="gov-record-title">Farmer records</h2>
+            <div>
+              <h2 className="gov-record-title">Farmer records</h2>
+              {!loadingList && listError === null && (
+                <p className="gov-record-meta">{farmers.length} registered</p>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => void refresh()}
@@ -338,7 +343,7 @@ export default function FarmersPage() {
             </p>
           ) : farmers.length === 0 ? (
             <p role="status" className="gov-empty-state">
-              No farmers recorded yet. Add the first farmer above.
+              No farmer records available. Add the first farmer above.
             </p>
           ) : (
             <div className="gov-table-wrap mt-4">
@@ -348,18 +353,18 @@ export default function FarmersPage() {
                     <th scope="col">Full name</th>
                     <th scope="col">Barangay</th>
                     <th scope="col">Contact</th>
-                    <th scope="col">Farms</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" className="gov-cell-num">Farms</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {farmers.map((entry) => (
                     <tr key={entry.id}>
-                      <td>{entry.full_name}</td>
+                      <td className="gov-cell-primary">{entry.full_name}</td>
                       <td>{entry.barangay}</td>
                       <td>{entry.contact_number ?? "—"}</td>
-                      <td>{entry.farm_count}</td>
-                      <td>
+                      <td className="gov-cell-num">{entry.farm_count}</td>
+                      <td className="gov-col-actions">
                         <button
                           type="button"
                           onClick={() => {

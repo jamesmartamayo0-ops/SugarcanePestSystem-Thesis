@@ -395,25 +395,25 @@ export default function InspectionsPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -439,7 +439,7 @@ export default function InspectionsPage() {
           validated findings. Reported area stays unchanged; validated area is the
           inspector&apos;s independent measurement.
         </p>
-        <div className="gov-record-controls mt-3">
+        <div className="gov-page-links">
           <Link
             href="/pest-cases"
             className="gov-activity-link"
@@ -552,7 +552,14 @@ export default function InspectionsPage() {
 
         <section aria-label="Inspection records" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
-            <h2 className="gov-record-title">Inspection records</h2>
+            <div>
+              <h2 className="gov-record-title">Inspection records</h2>
+              {!loading && listError === null && (
+                <p className="gov-record-meta">
+                  {inspections.length} {inspections.length === 1 ? "record" : "records"} shown
+                </p>
+              )}
+            </div>
             <div className="gov-record-controls">
               <label
                 htmlFor="technician_filter"
@@ -597,7 +604,7 @@ export default function InspectionsPage() {
             </p>
           ) : inspections.length === 0 ? (
             <p role="status" className="gov-empty-state">
-              No inspections found. Schedule the first inspection above.
+              No inspection records available. Schedule the first inspection above.
             </p>
           ) : (
             <div className="gov-table-wrap mt-4">
@@ -609,17 +616,17 @@ export default function InspectionsPage() {
                     <th scope="col">Agriculture Technician</th>
                     <th scope="col">Scheduled</th>
                     <th scope="col">Status</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {inspections.map((entry) => (
                     <tr key={entry.id}>
-                      <td>#{entry.id}</td>
+                      <td className="gov-cell-id">#{entry.id}</td>
                       <td>
-                        #{entry.pest_case_id} — {entry.pest_case.pest_name}
-                        <span className="block text-xs text-slate-600">
-                          {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
+                        <span className="gov-cell-primary">{entry.pest_case.pest_name}</span>
+                        <span className="gov-cell-meta">
+                          Case #{entry.pest_case_id} · {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                           {entry.pest_case.farm?.farmer?.full_name ?? "—"}
                         </span>
                       </td>
@@ -634,7 +641,7 @@ export default function InspectionsPage() {
                           {workflowLabel(entry.pest_case.status)}
                         </span>
                       </td>
-                      <td>
+                      <td className="gov-col-actions">
                         <button
                           type="button"
                           onClick={() => void openDetail(entry.id)}

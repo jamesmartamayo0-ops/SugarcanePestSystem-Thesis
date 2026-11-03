@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { workflowLabel } from "@/lib/presentation";
+import { workflowBadgeClass, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import {
   FarmsRequestError,
@@ -38,7 +38,20 @@ function parseArea(raw: string): number | null {
 }
 
 function statusBadge(status: PestCaseStatus): string {
-  return `gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`;
+  return workflowBadgeClass(status);
+}
+
+function farmSummary(farms: FarmWithFarmer[], farmId: number) {
+  const farm = farms.find((item) => item.id === farmId);
+  if (farm === undefined) {
+    return <span className="gov-cell-meta">Farm #{farmId}</span>;
+  }
+  return (
+    <>
+      {farm.plot_identifier}
+      <span className="gov-cell-meta">{farm.farmer.full_name}</span>
+    </>
+  );
 }
 
 function PestCasesPageInner() {
@@ -398,25 +411,25 @@ function PestCasesPageInner() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -550,6 +563,11 @@ function PestCasesPageInner() {
 
         <section aria-label="Pest case records" className="gov-card gov-record-section">
           <h2 className="gov-record-title">Pest case records</h2>
+          {!loadingList && listError === null && (
+            <p className="gov-record-meta">
+              {cases.length} {cases.length === 1 ? "case" : "cases"} shown
+            </p>
+          )}
           <form
             aria-label="Search and filter pest cases"
             onSubmit={(event) => {
@@ -711,36 +729,37 @@ function PestCasesPageInner() {
             </p>
           ) : cases.length === 0 ? (
             <p role="status" className="gov-empty-state">
-              No pest cases found. Report the first case above.
+              No pest case records found. Adjust the filters or report a new case above.
             </p>
           ) : (
             <div className="gov-table-wrap mt-4">
               <table className="gov-table min-w-[720px]">
                 <thead>
                   <tr>
-                    <th scope="col">Pest</th>
-                    <th scope="col">Area (ha)</th>
+                    <th scope="col">Case</th>
+                    <th scope="col">Farm and farmer</th>
+                    <th scope="col" className="gov-cell-num">Reported area (ha)</th>
                     <th scope="col">Status</th>
                     <th scope="col">Observed</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cases.map((entry) => (
                     <tr key={entry.id}>
-                      <td>{entry.pest_name}</td>
                       <td>
-                        {entry.reported_area_hectares.toFixed(2)}
+                        <span className="gov-cell-primary">{entry.pest_name}</span>
+                        <span className="gov-cell-meta">Case #{entry.id}</span>
                       </td>
+                      <td>{farmSummary(farms, entry.farm_id)}</td>
+                      <td className="gov-cell-num">{entry.reported_area_hectares.toFixed(2)}</td>
                       <td>
-                        <span
-                          className={statusBadge(entry.status)}
-                        >
+                        <span className={statusBadge(entry.status)}>
                           {workflowLabel(entry.status)}
                         </span>
                       </td>
                       <td>{entry.observed_on ?? "—"}</td>
-                      <td>
+                      <td className="gov-col-actions">
                         <div className="gov-table-actions">
                           <button
                             type="button"
@@ -832,7 +851,7 @@ function PestCasesPageInner() {
                 </dl>
 
                 {detail.status === "REPORTED" ? (
-                  <div className="mt-6">
+                  <div className="gov-workflow-panel">
                     <h3 className="gov-record-title">Edit report details</h3>
                     <form
                       onSubmit={(event) => void handleEdit(event, detail)}
@@ -969,8 +988,8 @@ export default function PestCasesPage() {
   return (
     <Suspense
       fallback={
-        <main className="mx-auto max-w-3xl px-6 py-12">
-          <p role="status">Loading pest cases...</p>
+        <main className="gov-status-page">
+          <p role="status" className="gov-status-message">Loading pest cases...</p>
         </main>
       }
     >

@@ -21,6 +21,11 @@ export function workflowMessage(value: string): string {
   return value.replace(/\b[A-Z]+(?:_[A-Z]+)*\b/g, workflowLabel);
 }
 
+// Colours live in globals.css; this only maps a workflow value to its badge class.
+export function workflowBadgeClass(value: string): string {
+  return `gov-status-badge gov-status-${value.toLowerCase().replaceAll("_", "-")}`;
+}
+
 // Rendering only: date-only values retain their calendar day; timestamps use Manila time.
 export function formatDisplayDate(value: string | null): string {
   if (value === null) {

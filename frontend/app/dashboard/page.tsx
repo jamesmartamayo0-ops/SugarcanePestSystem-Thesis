@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatDisplayDate } from "@/lib/presentation";
+import { formatDisplayDate, workflowBadgeClass } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import FarmMonitoringMap from "@/components/farm-monitoring-map";
 import {
@@ -160,31 +160,31 @@ export default function DashboardPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
         <button
           type="button"
           onClick={() => window.location.reload()}
-          className="mt-6 rounded-lg bg-emerald-700 px-4 py-2 font-medium text-white"
+          className="gov-button gov-button-primary"
         >
           Reload
         </button>
@@ -202,9 +202,12 @@ export default function DashboardPage() {
           Operational overview of sugarcane pest cases and field activities.
         </p>
       </header>
-      <section aria-label="Operational summary">
+      <section aria-labelledby="operational-summary-heading">
+        <h2 id="operational-summary-heading" className="gov-section-title gov-section-heading">
+          Operational summary
+        </h2>
         {loadingSummary ? (
-          <p role="status" className="gov-page-description">Loading operational summary...</p>
+          <p role="status" className="gov-empty-state">Loading operational summary...</p>
         ) : summaryError ? (
           <p role="alert" className="gov-alert gov-alert-error">{summaryError}</p>
         ) : summary ? (
@@ -219,7 +222,7 @@ export default function DashboardPage() {
                 <div key={item.label} className="gov-stat">
                   <dt className="gov-stat-label">{item.label}</dt>
                   <dd className="gov-stat-value">{item.value}</dd>
-                  <dd className="gov-page-description">{item.description}</dd>
+                  <dd className="gov-stat-note">{item.description}</dd>
                 </div>
               ))}
             </dl>
@@ -230,7 +233,7 @@ export default function DashboardPage() {
                   {WORKFLOW_ITEMS.map((item) => (
                     <li key={item.status}>
                       <Link href={item.href} className="gov-status-row">
-                        <span>{item.label}</span>
+                        <span className={workflowBadgeClass(item.status)}>{item.label}</span>
                         <strong>{summary.by_status[item.status]}</strong>
                       </Link>
                     </li>
@@ -260,17 +263,17 @@ export default function DashboardPage() {
             <section className="gov-card gov-section" aria-labelledby="activity-heading">
               <h2 id="activity-heading" className="gov-card-header">Recent Activity</h2>
               {summary.recent_cases.length === 0 ? (
-                <p role="status" className="gov-card-body gov-page-description">No pest cases yet.</p>
+                <p role="status" className="gov-empty-state">No pest case records available.</p>
               ) : (
                 <ul className="gov-activity-list">
                   {summary.recent_cases.map((entry) => (
                     <li key={entry.id} className="gov-activity-item">
                       <div>
                         <p className="gov-activity-reference">#{entry.id} — {entry.pest_name}</p>
-                        <p className="gov-page-description">Updated {formatDisplayDate(entry.updated_at ?? null)}</p>
+                        <p className="gov-activity-meta">Updated {formatDisplayDate(entry.updated_at ?? null)}</p>
                       </div>
                       <div className="gov-activity-actions">
-                        <span className="status-badge">
+                        <span className={workflowBadgeClass(entry.status)}>
                           {WORKFLOW_ITEMS.find((item) => item.status === entry.status)?.label ?? entry.status}
                         </span>
                         <Link href={`/pest-cases/${entry.id}`} className="gov-activity-link">
@@ -295,8 +298,8 @@ export default function DashboardPage() {
       <section className="gov-card gov-section gov-map-section" aria-labelledby="farm-map-heading">
         <div className="gov-record-toolbar gov-map-heading-row">
           <div>
-            <h2 id="farm-map-heading" className="gov-card-header">Farm Monitoring Map</h2>
-            <p className="gov-map-intro">
+            <h2 id="farm-map-heading" className="gov-section-title">Farm Monitoring Map</h2>
+            <p className="gov-section-description">
               Approximate registered farm locations and their current workflow state.
             </p>
           </div>
@@ -336,7 +339,7 @@ export default function DashboardPage() {
                 <div key={item.label} className="gov-stat">
                   <dt className="gov-stat-label">{item.label}</dt>
                   <dd className="gov-stat-value">{item.value}</dd>
-                  <dd className="gov-page-description">{item.description}</dd>
+                  <dd className="gov-stat-note">{item.description}</dd>
                 </div>
               ))}
             </dl>

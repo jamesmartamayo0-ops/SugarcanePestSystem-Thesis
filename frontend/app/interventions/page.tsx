@@ -60,16 +60,16 @@ function followUpLabel(followUp: string | null, completed: boolean): string {
 
 function followUpBadge(followUp: string | null): string {
   if (followUp === null) {
-    return "gov-status-badge";
+    return "gov-status-badge gov-due-upcoming";
   }
   const today = todayIso();
   if (followUp < today) {
-    return "gov-status-badge gov-status-reintervention-required";
+    return "gov-status-badge gov-due-overdue";
   }
   if (followUp === today) {
-    return "gov-status-badge gov-status-follow-up-due";
+    return "gov-status-badge gov-due-today";
   }
-  return "gov-status-badge";
+  return "gov-status-badge gov-due-upcoming";
 }
 
 function statusBadge(status: string): string {
@@ -478,25 +478,25 @@ export default function InterventionsPage() {
 
   if (auth.status === "loading") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Checking your session...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Checking your session...</p>
       </main>
     );
   }
 
   if (auth.status === "unauthenticated") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p role="status">Redirecting to sign in...</p>
+      <main className="gov-status-page">
+        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
       </main>
     );
   }
 
   if (auth.status === "error") {
     return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-2xl font-semibold">Unable to verify your session</h1>
-        <p className="mt-3 text-slate-600">
+      <main className="gov-status-page">
+        <h1 className="gov-section-title">Unable to verify your session</h1>
+        <p className="gov-field-help">
           The authentication service is unavailable. Reload this page to try again.
         </p>
       </main>
@@ -524,7 +524,7 @@ export default function InterventionsPage() {
           cycles stay distinguishable. Categories are documentation labels only
           and never prescribe chemicals, rates, or dosages.
         </p>
-        <div className="gov-record-controls mt-3">
+        <div className="gov-page-links">
           <Link
             href="/pest-cases"
             className="gov-activity-link"
@@ -687,7 +687,14 @@ export default function InterventionsPage() {
 
         <section aria-label="Intervention records" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
-            <h2 className="gov-record-title">Intervention records</h2>
+            <div>
+              <h2 className="gov-record-title">Intervention records</h2>
+              {!loading && listError === null && (
+                <p className="gov-record-meta">
+                  {interventions.length} {interventions.length === 1 ? "record" : "records"} shown
+                </p>
+              )}
+            </div>
             <div className="gov-record-controls">
               <label htmlFor="case_filter" className="gov-label">
                 Case
@@ -701,7 +708,7 @@ export default function InterventionsPage() {
                 }}
                 placeholder="All"
                 inputMode="numeric"
-                className="gov-input w-24"
+                className="gov-input gov-input-narrow"
               />
               <label htmlFor="technician_filter" className="gov-label">
                 Agriculture Technician
@@ -743,7 +750,7 @@ export default function InterventionsPage() {
             </p>
           ) : interventions.length === 0 ? (
             <p role="status" className="gov-empty-state">
-              No interventions found. Start the first intervention above.
+              No intervention records available. Start the first intervention above.
             </p>
           ) : (
             <div className="gov-table-wrap mt-4">
@@ -755,7 +762,7 @@ export default function InterventionsPage() {
                     <th scope="col">Agriculture Technician</th>
                     <th scope="col">Status</th>
                     <th scope="col">Follow-up</th>
-                    <th scope="col">Action</th>
+                    <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -765,15 +772,16 @@ export default function InterventionsPage() {
                     return (
                       <tr key={entry.id}>
                         <td>
-                          #{entry.id} — {entry.method_category} (cycle {cycle})
-                          <span className="block text-xs text-slate-600">
-                            Scheduled {entry.scheduled_for}
+                          <span className="gov-cell-primary">#{entry.id}</span>{" "}
+                          <span className="gov-tag">{entry.method_category}</span>
+                          <span className="gov-cell-meta">
+                            Cycle {cycle} · Scheduled {entry.scheduled_for}
                           </span>
                         </td>
                         <td>
-                          #{entry.pest_case_id} — {entry.pest_case.pest_name}
-                          <span className="block text-xs text-slate-600">
-                            {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
+                          <span className="gov-cell-primary">{entry.pest_case.pest_name}</span>
+                          <span className="gov-cell-meta">
+                            Case #{entry.pest_case_id} · {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                             {entry.pest_case.farm?.farmer?.full_name ?? "—"}
                           </span>
                         </td>
@@ -794,7 +802,7 @@ export default function InterventionsPage() {
                             {followUpLabel(entry.follow_up_due_on, completed)}
                           </span>
                         </td>
-                        <td>
+                        <td className="gov-col-actions">
                           <button
                             type="button"
                             onClick={() => void openDetail(entry.id)}
@@ -1063,11 +1071,11 @@ export default function InterventionsPage() {
                                 id="reuse_planned_follow_up_date"
                                 name="reuse_planned_follow_up_date"
                                 type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300"
+                                className="gov-checkbox"
                               />
                               <label
                                 htmlFor="reuse_planned_follow_up_date"
-                                className="text-sm text-slate-700"
+                                className="gov-inline-label"
                               >
                                 Reuse planned follow-up date ({detail.follow_up_due_on})
                               </label>

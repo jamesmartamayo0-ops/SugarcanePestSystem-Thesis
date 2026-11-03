@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { logout, type UserRole } from "@/lib/auth";
+import { OFFICE_NAME, SYSTEM_NAME } from "@/lib/branding";
 
 type NavItem = {
   href: string;
@@ -90,10 +91,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
       <header className="gov-header">
         <div className="gov-header-brand">
-          <strong>Bais City Agriculturist&apos;s Office</strong>
-          <span>
-            Sugarcane Pest Inspection and Intervention Workflow Management System
-          </span>
+          <div className="gov-logo-slot" aria-hidden="true" />
+          <div className="gov-header-brand-text">
+            <strong>{OFFICE_NAME}</strong>
+            <span>{SYSTEM_NAME}</span>
+          </div>
         </div>
         <div className="gov-header-user">
           <p>
