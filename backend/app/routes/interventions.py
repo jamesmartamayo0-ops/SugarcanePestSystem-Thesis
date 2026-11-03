@@ -15,7 +15,11 @@ from app.models.intervention import (
     normalize_performed_on,
     normalize_scheduled_for as normalize_intervention_scheduled_for,
 )
-from app.scoping import apply_intervention_scope, can_view_intervention
+from app.scoping import (
+    apply_intervention_scope,
+    can_act_on_assigned_work,
+    can_view_intervention,
+)
 
 interventions_bp = Blueprint("interventions", __name__, url_prefix="/api/v1/interventions")
 
@@ -265,12 +269,7 @@ def _is_completed(intervention: Intervention) -> bool:
 
 
 def _can_act_on(intervention: Intervention) -> bool:
-    if g.current_user.role == UserRole.ADMIN.value:
-        return True
-    return (
-        g.current_user.role == UserRole.TECHNICIAN.value
-        and intervention.assigned_to_user_id == g.current_user.id
-    )
+    return can_act_on_assigned_work(g.current_user, intervention)
 
 
 @interventions_bp.after_request
@@ -344,10 +343,7 @@ def update_intervention_plan(intervention_id: int):
     if prelim is None:
         return auth_error("Intervention not found.", 404)
     # Fast permission check before locking; authoritative check repeats while locked.
-    if g.current_user.role != UserRole.ADMIN.value and (
-        g.current_user.role != UserRole.TECHNICIAN.value
-        or prelim.assigned_to_user_id != g.current_user.id
-    ):
+    if not _can_act_on(prelim):
         return auth_error("Permission denied.", 403)
     case_id = prelim.pest_case_id
 
@@ -461,10 +457,7 @@ def complete_intervention(intervention_id: int):
     if prelim is None:
         return auth_error("Intervention not found.", 404)
     # Fast permission check before locking; authoritative check repeats while locked.
-    if g.current_user.role != UserRole.ADMIN.value and (
-        g.current_user.role != UserRole.TECHNICIAN.value
-        or prelim.assigned_to_user_id != g.current_user.id
-    ):
+    if not _can_act_on(prelim):
         return auth_error("Permission denied.", 403)
     case_id = prelim.pest_case_id
 

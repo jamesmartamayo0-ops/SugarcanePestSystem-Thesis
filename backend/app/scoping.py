@@ -240,3 +240,22 @@ def can_view_follow_up(user, follow_up) -> bool:
     if intervention is None:
         intervention = db.session.get(Intervention, follow_up.intervention_id)
     return can_view_intervention(user, intervention)
+
+
+def can_act_on_assigned_work(user, record) -> bool:
+    """Authorization for technician-like work on an assigned operational record.
+
+    ADMIN acts with supervisory authority across the office and is not bound to
+    the assigned technician. TECHNICIAN remains limited to work explicitly
+    assigned to them. Workflow state, locking, and field validation stay in the
+    route handlers and are not bypassed here.
+    """
+    user = _resolve_user(user)
+    if user is None:
+        return False
+    if is_admin(user):
+        return True
+    return (
+        is_technician(user)
+        and getattr(record, "assigned_to_user_id", None) == user.id
+    )

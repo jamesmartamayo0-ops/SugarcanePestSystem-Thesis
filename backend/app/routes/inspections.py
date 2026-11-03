@@ -18,7 +18,11 @@ from app.models import (
     normalize_scheduled_for,
     normalize_validated_area,
 )
-from app.scoping import apply_inspection_scope, can_view_inspection
+from app.scoping import (
+    apply_inspection_scope,
+    can_act_on_assigned_work,
+    can_view_inspection,
+)
 
 inspections_bp = Blueprint("inspections", __name__, url_prefix="/api/v1/inspections")
 
@@ -430,10 +434,7 @@ def record_findings(inspection_id: int):
     if prelim is None:
         return auth_error("Inspection not found.", 404)
     # Fast permission check before locking; authoritative check repeats while locked.
-    if g.current_user.role != UserRole.ADMIN.value and (
-        g.current_user.role != UserRole.TECHNICIAN.value
-        or prelim.assigned_to_user_id != g.current_user.id
-    ):
+    if not can_act_on_assigned_work(g.current_user, prelim):
         return auth_error("Permission denied.", 403)
     case_id = prelim.pest_case_id
 
@@ -471,10 +472,7 @@ def record_findings(inspection_id: int):
         db.session.rollback()
         return auth_error("Inspection not found.", 404)
 
-    if g.current_user.role != UserRole.ADMIN.value and (
-        g.current_user.role != UserRole.TECHNICIAN.value
-        or inspection.assigned_to_user_id != g.current_user.id
-    ):
+    if not can_act_on_assigned_work(g.current_user, inspection):
         db.session.rollback()
         return auth_error("Permission denied.", 403)
 

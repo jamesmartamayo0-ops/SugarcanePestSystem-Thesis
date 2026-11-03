@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.auth import auth_error, login_required, roles_required
 from app.extensions import db
-from app.models import Farm, FollowUp, Intervention, PestCase, PestCaseStatus, User, UserRole
+from app.models import Farm, FollowUp, Intervention, PestCase, PestCaseStatus, User
 from app.models.follow_up import (
     manila_today,
     normalize_assessment_notes,
@@ -18,6 +18,7 @@ from app.models.follow_up import (
 from app.scoping import (
     apply_follow_up_scope,
     apply_intervention_scope,
+    can_act_on_assigned_work,
     can_view_follow_up,
 )
 
@@ -336,12 +337,7 @@ def _is_completed(intervention: Intervention) -> bool:
 
 
 def _can_act_on(intervention: Intervention) -> bool:
-    if g.current_user.role == UserRole.ADMIN.value:
-        return True
-    return (
-        g.current_user.role == UserRole.TECHNICIAN.value
-        and intervention.assigned_to_user_id == g.current_user.id
-    )
+    return can_act_on_assigned_work(g.current_user, intervention)
 
 
 @follow_ups_bp.after_request
@@ -426,10 +422,7 @@ def record_follow_up(intervention_id: int):
     if prelim is None:
         return auth_error("Intervention not found.", 404)
     # Fast permission check before locking; authoritative check repeats while locked.
-    if g.current_user.role != UserRole.ADMIN.value and (
-        g.current_user.role != UserRole.TECHNICIAN.value
-        or prelim.assigned_to_user_id != g.current_user.id
-    ):
+    if not _can_act_on(prelim):
         return auth_error("Permission denied.", 403)
     case_id = prelim.pest_case_id
 
