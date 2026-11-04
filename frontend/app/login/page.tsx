@@ -1,11 +1,17 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
 import { AuthRequestError, login } from "@/lib/auth";
-import { OFFICE_NAME, SYSTEM_NAME } from "@/lib/branding";
+import {
+  BAIS_CITY_SEAL_ALT,
+  BAIS_CITY_SEAL_SRC,
+  OFFICE_NAME,
+  SYSTEM_NAME,
+} from "@/lib/branding";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -58,7 +64,15 @@ export default function LoginPage() {
     <main className="gov-login">
       <div className="gov-card gov-login-card">
         <header className="gov-login-brand">
-          <div className="gov-logo-slot gov-logo-slot--login" aria-hidden="true" />
+          <div className="gov-logo-slot gov-logo-slot--login">
+            <Image
+              src={BAIS_CITY_SEAL_SRC}
+              alt={BAIS_CITY_SEAL_ALT}
+              width={192}
+              height={192}
+              loading="eager"
+            />
+          </div>
           <p className="gov-login-office">{OFFICE_NAME}</p>
         </header>
         <h1 className="gov-login-title">{SYSTEM_NAME}</h1>

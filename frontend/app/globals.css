@@ -145,38 +145,29 @@ body {
   min-width: 0;
 }
 
-/* Reserved logo area: keeps its size so the official mark can drop in later. */
+/* Official logo area. The artwork is transparent outside its circular seal. */
 .gov-logo-slot {
   flex: 0 0 auto;
   box-sizing: border-box;
   width: 44px;
   height: 44px;
-  border: 1px dashed rgba(255, 255, 255, 0.4);
-  border-radius: 6px;
 }
 
-/* Header logo plate: ready for the official image without touching layout. */
-.gov-header .gov-logo-slot {
-  width: 56px;
-  height: 56px;
-  padding: 4px;
-  background-color: #f6f8fb;
-  border: 1px dashed rgba(23, 50, 77, 0.28);
-  border-radius: 8px;
-}
-
-.gov-header .gov-logo-slot > img {
+.gov-logo-slot > img {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: contain;
 }
 
+.gov-header .gov-logo-slot {
+  width: 56px;
+  height: 56px;
+}
+
 .gov-logo-slot--login {
-  width: 84px;
-  height: 84px;
-  border-color: var(--border-strong);
-  background-color: var(--surface-muted);
+  width: 96px;
+  height: 96px;
 }
 
 .gov-header-brand-text {
@@ -361,7 +352,6 @@ body {
   .gov-header .gov-logo-slot {
     width: 48px;
     height: 48px;
-    padding: 3px;
   }
 
   .gov-header-brand {

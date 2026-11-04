@@ -1,12 +1,18 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { logout, type UserRole } from "@/lib/auth";
-import { OFFICE_NAME, SYSTEM_NAME } from "@/lib/branding";
+import {
+  BAIS_CITY_SEAL_ALT,
+  BAIS_CITY_SEAL_SRC,
+  OFFICE_NAME,
+  SYSTEM_NAME,
+} from "@/lib/branding";
 
 type NavItem = {
   href: string;
@@ -91,7 +97,15 @@ export function AppShell({ children }: { children: ReactNode }) {
       </a>
       <header className="gov-header">
         <div className="gov-header-brand">
-          <div className="gov-logo-slot" aria-hidden="true" />
+          <div className="gov-logo-slot">
+            <Image
+              src={BAIS_CITY_SEAL_SRC}
+              alt={BAIS_CITY_SEAL_ALT}
+              width={112}
+              height={112}
+              loading="eager"
+            />
+          </div>
           <div className="gov-header-brand-text">
             <strong>{OFFICE_NAME}</strong>
             <span>{SYSTEM_NAME}</span>
