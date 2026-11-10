@@ -10,6 +10,7 @@ from sqlalchemy.engine import URL
 
 class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
     SESSION_COOKIE_NAME = "sugarcane_session"
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"

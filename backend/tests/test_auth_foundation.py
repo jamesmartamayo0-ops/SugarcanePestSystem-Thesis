@@ -66,6 +66,7 @@ def test_session_configuration_and_cli_registration(monkeypatch):
     assert app.config["SESSION_COOKIE_SECURE"] is False
     assert app.config["PERMANENT_SESSION_LIFETIME"] == timedelta(hours=8)
     assert app.config["SESSION_REFRESH_EACH_REQUEST"] is False
+    assert app.config["SQLALCHEMY_ENGINE_OPTIONS"] == {"pool_pre_ping": True}
     assert "create-admin" in app.cli.commands
     assert not app.cli.commands["create-admin"].params
 
