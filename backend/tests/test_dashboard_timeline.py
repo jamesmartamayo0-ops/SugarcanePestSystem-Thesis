@@ -242,6 +242,7 @@ def phase4_client(monkeypatch):
         return items
 
     monkeypatch.setattr(pest_cases_module, "list_all_pest_cases", fake_list)
+    monkeypatch.setattr(pest_cases_module, "list_case_evidence_photos", lambda cid: [])
 
     return app.test_client(), case_store, state
 

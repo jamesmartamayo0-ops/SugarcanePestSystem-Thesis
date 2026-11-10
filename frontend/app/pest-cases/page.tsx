@@ -4,8 +4,9 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { formatDisplayDate, workflowBadgeClass, workflowLabel } from "@/lib/presentation";
+import { formatDisplayDate, pestLabel, workflowBadgeClass, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import { EvidencePhotoGallery } from "@/components/evidence-photos";
 import { Icon } from "@/components/icons";
 import {
   PageHeader,
@@ -27,12 +28,33 @@ import {
   listPestCases,
   submitForInspection,
   updatePestCase,
+  uploadEvidencePhotos,
   type PestCaseDetail,
   type PestCaseStatus,
   type PestCaseSummary,
 } from "@/lib/pest-cases";
 
 const AREA_PATTERN = /^\d+(\.\d{1,2})?$/;
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+
+function validatePhotoFiles(files: File[], remaining = 3): string | null {
+  if (files.length === 0) {
+    return null;
+  }
+  if (files.length > remaining) {
+    return `You can add at most ${remaining} more evidence photo${remaining === 1 ? "" : "s"}.`;
+  }
+  for (const file of files) {
+    if (!PHOTO_TYPES.includes(file.type)) {
+      return "Evidence photos must be JPEG, PNG, or WebP.";
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      return "Each evidence photo must be at most 5 MiB.";
+    }
+  }
+  return null;
+}
 
 function parseArea(raw: string): number | null {
   const trimmed = raw.trim();
@@ -118,6 +140,10 @@ function PestCasesPageInner() {
   const [editError, setEditError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [createPhotos, setCreatePhotos] = useState<File[]>([]);
+  const [detailPhotos, setDetailPhotos] = useState<File[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const authenticated = auth.status === "authenticated";
   const detailRef = useRevealOnChange<HTMLElement>(loadingDetail ? null : selectedId);
@@ -249,6 +275,8 @@ function PestCasesPageInner() {
       setDetailError(null);
       setEditError(null);
       setActionError(null);
+      setDetailPhotos([]);
+      setPhotoError(null);
       setLoadingDetail(true);
       try {
         setDetail(await getPestCase(caseId));
@@ -287,24 +315,28 @@ function PestCasesPageInner() {
       !Number.isSafeInteger(farmId) ||
       farmId <= 0 ||
       typeof pestName !== "string" ||
-      pestName.trim() === "" ||
       area === null ||
       (symptoms !== null && typeof symptoms !== "string") ||
       (observedOn !== null && typeof observedOn !== "string")
     ) {
       setFormError(
-        "Select a farm and enter a pest name and affected area (0–10000 ha, up to 2 decimals).",
+        "Select a farm and enter the affected area (0–10000 ha, up to 2 decimals).",
       );
+      return;
+    }
+    const photoProblem = validatePhotoFiles(createPhotos);
+    if (photoProblem !== null) {
+      setFormError(photoProblem);
       return;
     }
     setCreating(true);
     setFormError(null);
     setFormNotice(null);
     try {
-      const created = await createPestCase(
+      let created = await createPestCase(
         {
           farm_id: farmId,
-          pest_name: pestName.trim(),
+          pest_name: pestName.trim() === "" ? null : pestName.trim(),
           symptoms:
             symptoms === null || symptoms.trim() === "" ? undefined : symptoms.trim(),
           observed_on:
@@ -313,6 +345,19 @@ function PestCasesPageInner() {
         },
         auth.csrfToken,
       );
+      if (createPhotos.length > 0) {
+        try {
+          created = await uploadEvidencePhotos(created.id, createPhotos, auth.csrfToken);
+        } catch (failure) {
+          setFormError(
+            `The case was reported, but the evidence photos could not be uploaded. ${
+              failure instanceof PestCasesRequestError
+                ? failure.message
+                : "Open the case to retry."
+            }`,
+          );
+        }
+      }
       setCases((current) =>
         [
           ...current,
@@ -327,9 +372,10 @@ function PestCasesPageInner() {
           },
         ].sort((left, right) => left.id - right.id),
       );
-      setFormNotice(`Pest case for ${created.pest_name} was reported.`);
+      setFormNotice(`Pest case for ${pestLabel(created.pest_name)} was reported.`);
       form.reset();
       setPreselectedFarmId("");
+      setCreatePhotos([]);
     } catch (failure) {
       if (failure instanceof PestCasesRequestError && failure.kind === "unauthenticated") {
         router.replace("/login");
@@ -358,12 +404,11 @@ function PestCasesPageInner() {
     const area = typeof areaRaw === "string" ? parseArea(areaRaw) : null;
     if (
       typeof pestName !== "string" ||
-      pestName.trim() === "" ||
       area === null ||
       (symptoms !== null && typeof symptoms !== "string") ||
       (observedOn !== null && typeof observedOn !== "string")
     ) {
-      setEditError("Pest name and affected area (0–10000 ha, up to 2 decimals) are required.");
+      setEditError("Enter an affected area from 0–10000 ha with up to 2 decimals.");
       return;
     }
     setSavingEdit(true);
@@ -372,7 +417,7 @@ function PestCasesPageInner() {
       const updated = await updatePestCase(
         target.id,
         {
-          pest_name: pestName.trim(),
+          pest_name: pestName.trim() === "" ? null : pestName.trim(),
           symptoms: symptoms === null || symptoms.trim() === "" ? null : symptoms.trim(),
           observed_on:
             observedOn === null || observedOn.trim() === "" ? null : observedOn.trim(),
@@ -380,7 +425,11 @@ function PestCasesPageInner() {
         },
         auth.csrfToken,
       );
-      setDetail(updated);
+      setDetail({
+        ...updated,
+        confirmed_pest_name: target.confirmed_pest_name,
+        evidence_photos: target.evidence_photos,
+      });
       setCases((current) =>
         current.map((entry) =>
           entry.id === updated.id
@@ -396,7 +445,7 @@ function PestCasesPageInner() {
             : entry,
         ),
       );
-      setFormNotice(`Pest case for ${updated.pest_name} was updated.`);
+      setFormNotice(`Pest case for ${pestLabel(updated.pest_name)} was updated.`);
     } catch (failure) {
       if (failure instanceof PestCasesRequestError && failure.kind === "unauthenticated") {
         router.replace("/login");
@@ -426,7 +475,9 @@ function PestCasesPageInner() {
           entry.id === updated.id ? { ...entry, status: updated.status } : entry,
         ),
       );
-      setFormNotice(`Pest case for ${updated.pest_name} was submitted for inspection.`);
+      setFormNotice(
+        `Pest case for ${pestLabel(updated.pest_name)} was submitted for inspection.`,
+      );
     } catch (failure) {
       if (failure instanceof PestCasesRequestError && failure.kind === "unauthenticated") {
         router.replace("/login");
@@ -439,6 +490,48 @@ function PestCasesPageInner() {
       );
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleUploadPhotos(
+    event: FormEvent<HTMLFormElement>,
+    target: PestCaseDetail,
+  ) {
+    event.preventDefault();
+    if (auth.status !== "authenticated") {
+      return;
+    }
+    const form = event.currentTarget;
+    const remaining = 3 - target.evidence_photos.length;
+    const photoProblem = validatePhotoFiles(detailPhotos, remaining);
+    if (photoProblem !== null) {
+      setPhotoError(photoProblem);
+      return;
+    }
+    if (detailPhotos.length === 0) {
+      setPhotoError("Select at least one evidence photo.");
+      return;
+    }
+    setUploadingPhotos(true);
+    setPhotoError(null);
+    try {
+      const updated = await uploadEvidencePhotos(target.id, detailPhotos, auth.csrfToken);
+      setDetail(updated);
+      setDetailPhotos([]);
+      setFormNotice(`Evidence photos uploaded for case #${target.id}.`);
+      form.reset();
+    } catch (failure) {
+      if (failure instanceof PestCasesRequestError && failure.kind === "unauthenticated") {
+        router.replace("/login");
+        return;
+      }
+      setPhotoError(
+        failure instanceof PestCasesRequestError
+          ? failure.message
+          : "Evidence photos could not be uploaded.",
+      );
+    } finally {
+      setUploadingPhotos(false);
     }
   }
 
@@ -508,7 +601,7 @@ function PestCasesPageInner() {
               </div>
               <div className="gov-field">
                 <label htmlFor="pest_name" className="gov-label">
-                  Pest name <span className="gov-required" aria-hidden="true">*</span>
+                  Suspected Pest <span className="gov-label-optional">(optional)</span>
                 </label>
                 <input
                   id="pest_name"
@@ -516,23 +609,31 @@ function PestCasesPageInner() {
                   type="text"
                   autoComplete="off"
                   maxLength={120}
-                  required
                   placeholder="e.g. Stem Borer"
+                  aria-describedby="pest_name_help"
                   className="gov-input"
                 />
+                <p id="pest_name_help" className="gov-field-help">
+                  Leave blank if the farmer does not know the pest. It can be confirmed during
+                  field inspection.
+                </p>
               </div>
               <div className="gov-field gov-field-wide">
                 <label htmlFor="symptoms" className="gov-label">
-                  Symptoms / observations <span className="gov-label-optional">(optional)</span>
+                  Observed Symptoms / Farmer Description
                 </label>
                 <textarea
                   id="symptoms"
                   name="symptoms"
                   rows={3}
                   maxLength={2000}
-                  placeholder="e.g. Bored stalks and wilting shoots on the east rows"
+                  placeholder="e.g. Naay buslot sa stem ug nag-yellow ang ubang dahon."
+                  aria-describedby="symptoms_help"
                   className="gov-textarea"
                 />
+                <p id="symptoms_help" className="gov-field-help">
+                  Record what the farmer noticed on the affected sugarcane.
+                </p>
               </div>
               <div className="gov-field">
                 <label htmlFor="observed_on" className="gov-label">
@@ -560,6 +661,33 @@ function PestCasesPageInner() {
                   placeholder="e.g. 1.25"
                   className="gov-input"
                 />
+              </div>
+              <div className="gov-field gov-field-wide">
+                <label htmlFor="evidence_photos" className="gov-label">
+                  Pest / Damage Evidence Photos{" "}
+                  <span className="gov-label-optional">(optional)</span>
+                </label>
+                <input
+                  id="evidence_photos"
+                  name="evidence_photos"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={(event) =>
+                    setCreatePhotos(Array.from(event.target.files ?? []))
+                  }
+                  aria-describedby="evidence_photos_help"
+                  className="gov-input"
+                />
+                <p id="evidence_photos_help" className="gov-field-help">
+                  Upload up to 3 clear photos. Photos support the initial report and do not
+                  constitute confirmed pest identification.
+                </p>
+                {createPhotos.length > 0 && (
+                  <p role="status" className="gov-field-help">
+                    {createPhotos.length} photo{createPhotos.length === 1 ? "" : "s"} selected.
+                  </p>
+                )}
               </div>
               <div className="gov-form-actions">
                 <button
@@ -781,7 +909,7 @@ function PestCasesPageInner() {
                       className={selectedId === entry.id ? "gov-row-selected" : undefined}
                     >
                       <td>
-                        <span className="gov-cell-primary">{entry.pest_name}</span>
+                        <span className="gov-cell-primary">{pestLabel(entry.pest_name)}</span>
                         <span className="gov-cell-meta">Case #{entry.id}</span>
                       </td>
                       <td>{farmSummary(farms, entry.farm_id)}</td>
@@ -839,7 +967,7 @@ function PestCasesPageInner() {
                 <div className="gov-record-toolbar">
                   <div>
                     <p className="gov-record-eyebrow">Case #{detail.id} · Initial report</p>
-                    <h2 className="gov-record-title">{detail.pest_name}</h2>
+                    <h2 className="gov-record-title">{pestLabel(detail.pest_name)}</h2>
                   </div>
                   <span className="gov-table-actions">
                     <span className={statusBadge(detail.status)}>
@@ -878,9 +1006,30 @@ function PestCasesPageInner() {
                     <dt className="gov-detail-label">Observed on</dt>
                     <dd className="gov-detail-value">{formatDisplayDate(detail.observed_on)}</dd>
                   </div>
+                  <div>
+                    <dt className="gov-detail-label">Suspected pest</dt>
+                    <dd className="gov-detail-value">{pestLabel(detail.pest_name)}</dd>
+                  </div>
+                  <div>
+                    <dt className="gov-detail-label">Confirmed pest</dt>
+                    <dd className="gov-detail-value">
+                      {detail.confirmed_pest_name ?? "Pending Field Validation"}
+                    </dd>
+                  </div>
                   <div className="gov-detail-wide">
-                    <dt className="gov-detail-label">Symptoms</dt>
+                    <dt className="gov-detail-label">
+                      Observed Symptoms / Farmer Description
+                    </dt>
                     <dd className="gov-detail-value">{detail.symptoms ?? "—"}</dd>
+                  </div>
+                  <div className="gov-detail-wide">
+                    <dt className="gov-detail-label">Pest / Damage Evidence Photos</dt>
+                    <dd className="gov-detail-value">
+                      <EvidencePhotoGallery
+                        caseId={detail.id}
+                        photos={detail.evidence_photos}
+                      />
+                    </dd>
                   </div>
                   <div>
                     <dt className="gov-detail-label">Reported by</dt>
@@ -889,6 +1038,57 @@ function PestCasesPageInner() {
                     </dd>
                   </div>
                 </dl>
+
+                {detail.status === "REPORTED" ? (
+                  <div className="gov-workflow-panel">
+                    <h3 className="gov-record-title">Pest / Damage Evidence Photos</h3>
+                    <p className="gov-record-intro">
+                      Upload up to 3 clear photos. Photos support the initial report and do not
+                      constitute confirmed pest identification.
+                    </p>
+                    <form
+                      onSubmit={(event) => void handleUploadPhotos(event, detail)}
+                      className="gov-form"
+                    >
+                      <div className="gov-field">
+                        <label htmlFor="detail_evidence_photos" className="gov-label">
+                          Add evidence photos{" "}
+                          <span className="gov-label-optional">(optional)</span>
+                        </label>
+                        <input
+                          id="detail_evidence_photos"
+                          name="detail_evidence_photos"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          onChange={(event) =>
+                            setDetailPhotos(Array.from(event.target.files ?? []))
+                          }
+                          aria-describedby="detail_evidence_photos_help"
+                          className="gov-input"
+                        />
+                        <p id="detail_evidence_photos_help" className="gov-field-help">
+                          JPEG, PNG, or WebP. Maximum 5 MiB per photo, up to{" "}
+                          {Math.max(0, 3 - detail.evidence_photos.length)} more.
+                        </p>
+                      </div>
+                      <div className="gov-form-actions">
+                        <button
+                          type="submit"
+                          disabled={uploadingPhotos}
+                          className="gov-button gov-button-secondary"
+                        >
+                          {uploadingPhotos ? "Uploading..." : "Upload photos"}
+                        </button>
+                      </div>
+                    </form>
+                    {photoError && (
+                      <p role="alert" className="gov-alert gov-alert-error mt-4">
+                        {photoError}
+                      </p>
+                    )}
+                  </div>
+                ) : null}
 
                 {detail.status === "REPORTED" ? (
                   <div className="gov-workflow-panel">
@@ -903,7 +1103,7 @@ function PestCasesPageInner() {
                     >
                       <div className="gov-field">
                         <label htmlFor="edit_pest_name" className="gov-label">
-                          Pest name <span className="gov-required" aria-hidden="true">*</span>
+                          Suspected Pest <span className="gov-label-optional">(optional)</span>
                         </label>
                         <input
                           id="edit_pest_name"
@@ -911,10 +1111,13 @@ function PestCasesPageInner() {
                           type="text"
                           autoComplete="off"
                           maxLength={120}
-                          required
-                          defaultValue={detail.pest_name}
+                          defaultValue={detail.pest_name ?? ""}
+                          aria-describedby="edit_pest_name_help"
                           className="gov-input"
                         />
+                        <p id="edit_pest_name_help" className="gov-field-help">
+                          Leave blank if the pest is not known yet.
+                        </p>
                       </div>
                       <div className="gov-field">
                         <label htmlFor="edit_area" className="gov-label">
@@ -946,7 +1149,7 @@ function PestCasesPageInner() {
                       </div>
                       <div className="gov-field">
                         <label htmlFor="edit_symptoms" className="gov-label">
-                          Symptoms <span className="gov-label-optional">(optional)</span>
+                          Observed Symptoms / Farmer Description
                         </label>
                         <textarea
                           id="edit_symptoms"

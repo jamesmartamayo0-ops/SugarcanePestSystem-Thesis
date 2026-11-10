@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatDisplayDate, workflowLabel, workflowMessage } from "@/lib/presentation";
+import { formatDisplayDate, pestLabel, workflowLabel, workflowMessage } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icons";
 import {
@@ -413,7 +413,7 @@ export default function FollowUpsPage() {
                       >
                         <td>
                           <span className="gov-cell-primary">
-                            {entry.pest_case?.pest_name ?? "—"}
+                            {pestLabel(entry.pest_case?.pest_name)}
                           </span>
                           <span className="gov-cell-meta">Case #{entry.pest_case_id}</span>
                           <span className="gov-cell-meta">
@@ -497,7 +497,7 @@ export default function FollowUpsPage() {
                   <dt className="gov-detail-label">Case</dt>
                   <dd className="gov-detail-value">
                     #{activeRecordingTarget.pest_case_id} —{" "}
-                    {activeRecordingTarget.pest_case?.pest_name ?? "—"}
+                    {pestLabel(activeRecordingTarget.pest_case?.pest_name)}
                   </dd>
                 </div>
                 <div>
@@ -786,7 +786,7 @@ export default function FollowUpsPage() {
                       Follow-up #{detail.id}
                       {detail.pest_case ? ` · Case #${detail.pest_case.id}` : ""}
                     </p>
-                    <h2 className="gov-record-title">{detail.pest_case?.pest_name ?? "—"}</h2>
+                    <h2 className="gov-record-title">{pestLabel(detail.pest_case?.pest_name)}</h2>
                   </div>
                   <span className="gov-table-actions">
                     <span className="gov-badge-group">

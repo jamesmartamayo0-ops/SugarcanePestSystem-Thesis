@@ -9,7 +9,7 @@ export type TechnicianSummary = {
 
 export type InspectionCaseRef = {
   id: number;
-  pest_name: string;
+  pest_name: string | null;
   status: PestCaseStatus;
   reported_area_hectares: number;
   farm: {
@@ -35,6 +35,7 @@ export type InspectionDetail = {
   inspected_on: string | null;
   findings: string | null;
   pest_confirmed: boolean | null;
+  confirmed_pest_name: string | null;
   validated_area_hectares: number | null;
   completed_by_user_id: number | null;
   completed_at: string | null;
@@ -118,7 +119,7 @@ function parseCaseRef(value: unknown): InspectionCaseRef {
   const entry = value as Record<string, unknown>;
   if (
     typeof entry.id !== "number" ||
-    typeof entry.pest_name !== "string" ||
+    (entry.pest_name !== null && typeof entry.pest_name !== "string") ||
     !isStatus(entry.status) ||
     typeof entry.reported_area_hectares !== "number"
   ) {
@@ -161,7 +162,7 @@ function parseCaseRef(value: unknown): InspectionCaseRef {
   }
   return {
     id: entry.id as number,
-    pest_name: entry.pest_name as string,
+    pest_name: entry.pest_name as string | null,
     status: entry.status as PestCaseStatus,
     reported_area_hectares: entry.reported_area_hectares as number,
     farm,
@@ -187,6 +188,9 @@ function parseDetail(value: unknown, fallback: string): InspectionDetail {
     (entry.inspected_on !== null && typeof entry.inspected_on !== "string") ||
     (entry.findings !== null && typeof entry.findings !== "string") ||
     (entry.pest_confirmed !== null && typeof entry.pest_confirmed !== "boolean") ||
+    (entry.confirmed_pest_name !== null &&
+      entry.confirmed_pest_name !== undefined &&
+      typeof entry.confirmed_pest_name !== "string") ||
     (entry.validated_area_hectares !== null &&
       typeof entry.validated_area_hectares !== "number") ||
     (entry.completed_by_user_id !== null &&
@@ -211,6 +215,7 @@ function parseDetail(value: unknown, fallback: string): InspectionDetail {
     inspected_on: entry.inspected_on,
     findings: entry.findings,
     pest_confirmed: entry.pest_confirmed,
+    confirmed_pest_name: (entry.confirmed_pest_name as string | null | undefined) ?? null,
     validated_area_hectares: entry.validated_area_hectares,
     completed_by_user_id: entry.completed_by_user_id,
     completed_at: entry.completed_at,
@@ -410,6 +415,7 @@ export async function recordFindings(
   input: {
     findings: string;
     pest_confirmed: boolean;
+    confirmed_pest_name?: string | null;
     validated_area_hectares: number;
     inspected_on: string;
   },

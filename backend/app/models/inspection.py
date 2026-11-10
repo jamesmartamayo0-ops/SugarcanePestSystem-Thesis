@@ -11,6 +11,7 @@ from sqlalchemy import (
     Identity,
     Integer,
     Numeric,
+    String,
     Text,
     UniqueConstraint,
     func,
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.extensions import db
 from app.models.farm import MAX_AREA_HECTARES
+from app.models.pest_case import normalize_pest_name
 
 try:
     _MANILA_TZ = ZoneInfo("Asia/Manila")
@@ -159,6 +161,11 @@ class Inspection(db.Model):
             "OR (pest_confirmed = FALSE AND validated_area_hectares = 0)",
             name="ck_inspections_confirmed_area",
         ),
+        CheckConstraint(
+            "confirmed_pest_name IS NULL OR "
+            "(pest_confirmed = TRUE AND length(btrim(confirmed_pest_name)) > 0)",
+            name="ck_inspections_confirmed_pest_name",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
@@ -178,6 +185,8 @@ class Inspection(db.Model):
     inspected_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     findings: Mapped[str | None] = mapped_column(Text, nullable=True)
     pest_confirmed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Official field identification, kept separate from pest_cases.pest_name.
+    confirmed_pest_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     validated_area_hectares: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2), nullable=True
     )
@@ -248,6 +257,12 @@ class Inspection(db.Model):
         if type(value) is not bool:
             raise ValueError("Pest confirmation must be true or false.")
         return value
+
+    @validates("confirmed_pest_name")
+    def _validate_confirmed_pest_name(
+        self, _key: str, value: str | None
+    ) -> str | None:
+        return normalize_pest_name(value)
 
     def __repr__(self) -> str:
         return f"<Inspection id={self.id}>"

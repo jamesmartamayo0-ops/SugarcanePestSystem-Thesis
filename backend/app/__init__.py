@@ -5,7 +5,7 @@ from app.auth import enforce_unsafe_request, load_current_user, no_store_auth_re
 from app.cli import register_cli
 from app.config import configure_app
 from app.extensions import db, migrate
-from app.models import Farm, Farmer, FollowUp, Inspection, Intervention, PestCase, User  # Register model metadata before Flask-Migrate initializes.
+from app.models import Farm, Farmer, FollowUp, Inspection, Intervention, PestCase, PestCaseEvidencePhoto, User  # Register model metadata before Flask-Migrate initializes.
 from app.routes.admin import admin_bp
 from app.routes.auth import auth_bp
 from app.routes.dashboard import dashboard_bp

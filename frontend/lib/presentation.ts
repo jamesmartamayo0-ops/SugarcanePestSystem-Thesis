@@ -1,3 +1,12 @@
+export const PENDING_IDENTIFICATION = "Pending Identification";
+
+// Presentation only: initial reports may not know the pest yet.
+export function pestLabel(value: string | null | undefined): string {
+  return typeof value === "string" && value.trim() !== ""
+    ? value
+    : PENDING_IDENTIFICATION;
+}
+
 // Presentation only: never use these labels as API values or workflow comparisons.
 const WORKFLOW_LABELS: Record<string, string> = {
   REPORTED: "Reported",

@@ -190,6 +190,8 @@ def intervention_client(monkeypatch):
     monkeypatch.setattr(pest_cases_module, "acquire_pest_case_transition_lock", fake_lock)
     monkeypatch.setattr(pest_cases_module, "commit_pest_case_changes", lambda: None)
     monkeypatch.setattr(pest_cases_module, "get_user_by_id", fake_user)
+    monkeypatch.setattr(pest_cases_module, "get_inspection_by_case_id", lambda cid: None)
+    monkeypatch.setattr(pest_cases_module, "list_case_evidence_photos", lambda cid: [])
     monkeypatch.setattr(farmers_module, "list_all_farmers", lambda: [])
     monkeypatch.setattr(farms_module, "list_all_farms", lambda farmer_id=None: [])
 

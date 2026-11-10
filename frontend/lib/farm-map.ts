@@ -13,7 +13,7 @@ export type FarmMapSummary = {
 
 export type FarmMapCase = {
   id: number;
-  pest_name: string;
+  pest_name: string | null;
   status: PestCaseStatus;
   reported_area_hectares: number;
   validated_area_hectares: number | null;
@@ -208,7 +208,7 @@ function parseCase(value: unknown): FarmMapCase | null {
   }
   if (
     !isId(value.id) ||
-    typeof value.pest_name !== "string" ||
+    (value.pest_name !== null && typeof value.pest_name !== "string") ||
     !isCaseStatus(value.status) ||
     !isNumber(value.reported_area_hectares) ||
     (value.validated_area_hectares !== null && !isNumber(value.validated_area_hectares)) ||

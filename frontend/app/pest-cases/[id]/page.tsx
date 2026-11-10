@@ -6,11 +6,13 @@ import { useParams, useRouter } from "next/navigation";
 
 import {
   formatDisplayDate,
+  pestLabel,
   workflowBadgeClass,
   workflowLabel,
   workflowMessage,
 } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import { EvidencePhotoGallery } from "@/components/evidence-photos";
 import { Icon, type IconName } from "@/components/icons";
 import { PageHeader, SessionNotice } from "@/components/ui";
 import { CaseProgress } from "@/components/workflow-steps";
@@ -145,10 +147,16 @@ function EventOutcome({ event }: { event: TimelineEvent }) {
   if (event.event_type === "inspection_findings_recorded") {
     const confirmed = event.metadata.pest_confirmed === true;
     const area = numberOrNull(event.metadata.validated_area_hectares);
+    const confirmedName =
+      typeof event.metadata.confirmed_pest_name === "string"
+        ? event.metadata.confirmed_pest_name
+        : null;
     return (
       <span className={workflowBadgeClass(confirmed ? "FIELD_VALIDATED" : "NOT_CONFIRMED")}>
         {confirmed
-          ? `Confirmed${area !== null ? ` · ${area.toFixed(2)} ha validated` : ""}`
+          ? `Confirmed${confirmedName !== null ? ` · ${confirmedName}` : ""}${
+              area !== null ? ` · ${area.toFixed(2)} ha validated` : ""
+            }`
           : "Not confirmed"}
       </span>
     );
@@ -254,6 +262,10 @@ export default function PestCaseTimelinePage() {
   const nextStep = pestCase ? NEXT_STEPS[pestCase.status] : undefined;
   const confirmed = findings ? findings.metadata.pest_confirmed === true : null;
   const validatedArea = findings ? numberOrNull(findings.metadata.validated_area_hectares) : null;
+  const confirmedPestName =
+    findings && typeof findings.metadata.confirmed_pest_name === "string"
+      ? findings.metadata.confirmed_pest_name
+      : null;
   // A case past the inspection stages with no stored inspection record is not "pending".
   const inspectionNotRecorded =
     findings === null &&
@@ -270,7 +282,7 @@ export default function PestCaseTimelinePage() {
           pestCase ? (
             <span className="gov-page-title-row">
               <span>
-                Case #{pestCase.id} · {pestCase.pest_name}
+                Case #{pestCase.id} · {pestLabel(pestCase.pest_name)}
               </span>
               <span className={`${workflowBadgeClass(pestCase.status)} gov-status-badge--large`}>
                 {workflowLabel(pestCase.status)}
@@ -324,8 +336,8 @@ export default function PestCaseTimelinePage() {
                     </div>
                     <dl className="gov-detail-grid">
                       <div>
-                        <dt className="gov-detail-label">Reported pest</dt>
-                        <dd className="gov-detail-value">{pestCase.pest_name}</dd>
+                        <dt className="gov-detail-label">Suspected Pest</dt>
+                        <dd className="gov-detail-value">{pestLabel(pestCase.pest_name)}</dd>
                       </div>
                       <div>
                         <dt className="gov-detail-label">Estimated affected area</dt>
@@ -337,9 +349,20 @@ export default function PestCaseTimelinePage() {
                         <dt className="gov-detail-label">Observed on</dt>
                         <dd className="gov-detail-value">{formatDisplayDate(pestCase.observed_on)}</dd>
                       </div>
-                      <div>
-                        <dt className="gov-detail-label">Symptoms / observations</dt>
+                      <div className="gov-detail-wide">
+                        <dt className="gov-detail-label">
+                          Observed Symptoms / Farmer Description
+                        </dt>
                         <dd className="gov-detail-value">{pestCase.symptoms ?? "—"}</dd>
+                      </div>
+                      <div className="gov-detail-wide">
+                        <dt className="gov-detail-label">Pest / Damage Evidence Photos</dt>
+                        <dd className="gov-detail-value">
+                          <EvidencePhotoGallery
+                            caseId={pestCase.id}
+                            photos={pestCase.evidence_photos}
+                          />
+                        </dd>
                       </div>
                     </dl>
                   </div>
@@ -371,6 +394,14 @@ export default function PestCaseTimelinePage() {
                     {findings ? (
                       <dl className="gov-detail-grid">
                         <div>
+                          <dt className="gov-detail-label">Confirmed Pest</dt>
+                          <dd className="gov-detail-value">
+                            {confirmed
+                              ? confirmedPestName ?? "Confirmed (pest name not recorded)"
+                              : "Not applicable — infestation not confirmed"}
+                          </dd>
+                        </div>
+                        <div>
                           <dt className="gov-detail-label">Validated affected area</dt>
                           <dd className="gov-detail-value">
                             {validatedArea !== null ? `${validatedArea.toFixed(2)} ha` : "—"}
@@ -395,6 +426,7 @@ export default function PestCaseTimelinePage() {
                       </dl>
                     ) : (
                       <p className="gov-compare-caption">
+                        <strong>Confirmed Pest: Pending Field Validation. </strong>
                         {scheduled
                           ? `Inspection scheduled for ${formatDisplayDate(
                               typeof scheduled.metadata.scheduled_for === "string"

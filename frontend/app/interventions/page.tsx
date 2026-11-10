@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatDisplayDate, workflowLabel } from "@/lib/presentation";
+import { formatDisplayDate, pestLabel, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icons";
 import {
@@ -577,7 +577,7 @@ export default function InterventionsPage() {
                   </option>
                   {eligibleCases.map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      #{entry.id} — {entry.pest_name} ({entry.reported_area_hectares.toFixed(2)} ha) —{" "}
+                      #{entry.id} — {pestLabel(entry.pest_name)} ({entry.reported_area_hectares.toFixed(2)} ha) —{" "}
                       {workflowLabel(entry.status)}
                     </option>
                   ))}
@@ -789,7 +789,7 @@ export default function InterventionsPage() {
                           </span>
                         </td>
                         <td>
-                          <span className="gov-cell-primary">{entry.pest_case.pest_name}</span>
+                          <span className="gov-cell-primary">{pestLabel(entry.pest_case.pest_name)}</span>
                           <span className="gov-cell-meta">
                             Case #{entry.pest_case_id} · {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                             {entry.pest_case.farm?.farmer?.full_name ?? "—"}
@@ -858,7 +858,7 @@ export default function InterventionsPage() {
                       Intervention #{detail.id} · Case #{detail.pest_case_id} · Cycle{" "}
                       {cycleFor(interventions, detail)}
                     </p>
-                    <h2 className="gov-record-title">{detail.pest_case.pest_name}</h2>
+                    <h2 className="gov-record-title">{pestLabel(detail.pest_case.pest_name)}</h2>
                   </div>
                   <span className="gov-table-actions">
                     <span className={statusBadge(detail.pest_case.status)}>

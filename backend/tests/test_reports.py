@@ -229,6 +229,38 @@ def test_reports_case_rows_shape(reports_client):
     assert "efficacy" not in str(cases).lower()
 
 
+def test_reports_handles_case_without_suspected_pest(reports_client, monkeypatch):
+    client, _ = reports_client
+    login_admin(client)
+
+    farmer = Farmer(full_name="Juan Dela Cruz", barangay="Bunao")
+    farmer.id = 1
+    farm = Farm(
+        farmer_id=1, plot_identifier="Plot A", barangay="Bunao", area_hectares="4.00"
+    )
+    farm.id = 1
+    farm.farmer = farmer
+    case = PestCase(
+        farm_id=1,
+        pest_name=None,
+        symptoms="Naay buslot sa stem",
+        reported_area_hectares="1.00",
+        status=PestCaseStatus.REPORTED.value,
+        reported_by_user_id=2,
+    )
+    case.id = 99
+    case.reported_at = _stamp()
+    case.updated_at = _stamp()
+    case.farm = farm
+
+    monkeypatch.setattr(reports_module, "get_filtered_cases", lambda **kwargs: [case])
+    response = client.get(REPORTS)
+    assert response.status_code == 200
+    rows = response.get_json()["data"]["report"]["cases"]
+    assert rows[0]["pest_name"] is None
+    assert rows[0]["case_id"] == 99
+
+
 def test_reports_filters_forwarded(reports_client):
     client, captured = reports_client
     login_admin(client)

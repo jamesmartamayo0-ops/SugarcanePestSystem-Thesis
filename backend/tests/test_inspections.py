@@ -195,6 +195,7 @@ def inspection_client(monkeypatch):
     monkeypatch.setattr(pest_cases_module, "get_pest_case_by_id", fake_case_by_id)
     monkeypatch.setattr(pest_cases_module, "get_pest_case_for_update", fake_pest_case_for_update)
     monkeypatch.setattr(pest_cases_module, "get_inspection_by_case_id", fake_inspection_by_case)
+    monkeypatch.setattr(pest_cases_module, "list_case_evidence_photos", lambda case_id: [])
     monkeypatch.setattr(pest_cases_module, "acquire_pest_case_transition_lock", fake_lock)
     monkeypatch.setattr(pest_cases_module, "commit_pest_case_changes", lambda: None)
     monkeypatch.setattr(pest_cases_module, "get_farm_by_id", fake_farm)
@@ -477,6 +478,49 @@ def test_record_findings_confirmed_and_not_confirmed(inspection_client):
     assert cases[3].status == "FIELD_VALIDATED"
     assert cases[3].reported_area_hectares == Decimal("2.50")
     assert inspections[10].completed_by_user_id == 2
+
+
+def test_record_findings_keeps_suspected_and_confirmed_pests_separate(inspection_client):
+    client, cases, inspections, _, _, _ = inspection_client
+    token = login_tech(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    suspected_before = cases[3].pest_name
+    response = client.post(
+        FINDINGS(10),
+        json={
+            "findings": "Stem boring confirmed on site",
+            "pest_confirmed": True,
+            "confirmed_pest_name": "  Stem   Borer Moth ",
+            "validated_area_hectares": "1.25",
+            "inspected_on": "2026-10-07",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.get_json()["data"]["inspection"]
+    assert body["confirmed_pest_name"] == "Stem Borer Moth"
+    assert inspections[10].confirmed_pest_name == "Stem Borer Moth"
+    assert cases[3].pest_name == suspected_before == "Stem Borer"
+
+
+def test_confirmed_pest_rejected_when_infestation_not_confirmed(inspection_client):
+    client, cases, inspections, _, _, _ = inspection_client
+    token = login_tech(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    response = client.post(
+        FINDINGS(10),
+        json={
+            "findings": "No damage seen",
+            "pest_confirmed": False,
+            "confirmed_pest_name": "Stem Borer",
+            "validated_area_hectares": 0,
+            "inspected_on": "2026-10-07",
+        },
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert inspections[10].confirmed_pest_name is None
+    assert cases[3].status == "INSPECTION_SCHEDULED"
 
 
 def test_record_findings_not_confirmed_requires_zero(inspection_client):

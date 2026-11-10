@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatDisplayDate, workflowBadgeClass, workflowLabel } from "@/lib/presentation";
+import { formatDisplayDate, pestLabel, workflowBadgeClass, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import FarmMonitoringMap from "@/components/farm-monitoring-map";
 import { Icon, type IconName } from "@/components/icons";
@@ -417,7 +417,7 @@ export default function DashboardPage() {
                     {summary.recent_cases.map((entry) => (
                       <li key={entry.id} className="gov-activity-item">
                         <div>
-                          <p className="gov-activity-reference">{entry.pest_name}</p>
+                          <p className="gov-activity-reference">{pestLabel(entry.pest_name)}</p>
                           <p className="gov-activity-meta">
                             Case #{entry.id} · Updated {formatDisplayDate(entry.updated_at ?? null)}
                           </p>

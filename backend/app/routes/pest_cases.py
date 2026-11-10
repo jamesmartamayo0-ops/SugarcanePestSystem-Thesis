@@ -1,6 +1,8 @@
+import uuid
 from datetime import date
+from pathlib import Path
 
-from flask import Blueprint, current_app, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request, send_file
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
@@ -14,6 +16,7 @@ from app.models import (
     Inspection,
     Intervention,
     PestCase,
+    PestCaseEvidencePhoto,
     PestCaseStatus,
     User,
     UserRole,
@@ -48,7 +51,7 @@ pest_cases_bp = Blueprint("pest_cases", __name__, url_prefix="/api/v1/pest-cases
 # status lock (75240202) and the CLI bootstrap lock (75240201).
 PEST_CASE_TRANSITION_LOCK_BASE = 75240300
 
-_CREATE_REQUIRED = frozenset({"farm_id", "pest_name", "reported_area_hectares"})
+_CREATE_REQUIRED = frozenset({"farm_id", "reported_area_hectares"})
 _CREATE_ALLOWED = frozenset(
     {"farm_id", "pest_name", "symptoms", "observed_on", "reported_area_hectares"}
 )
@@ -57,6 +60,9 @@ _UPDATE_ALLOWED = frozenset(
 )
 _ALLOWED_STATUSES = frozenset({status.value for status in PestCaseStatus})
 _MAX_INPUT_LENGTHS = {"pest_name": 500, "symptoms": 5000}
+_EVIDENCE_MAX_PHOTOS = 3
+_EVIDENCE_MAX_BYTES = 5 * 1024 * 1024
+_EVIDENCE_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 
 
 def _iso(value) -> str | None:
@@ -95,11 +101,37 @@ def _pest_case_summary(case: PestCase) -> dict:
     }
 
 
+def _evidence_photo_payload(photo: PestCaseEvidencePhoto) -> dict:
+    return {
+        "id": photo.id,
+        "original_filename": photo.original_filename,
+        "content_type": photo.content_type,
+        "byte_size": photo.byte_size,
+        "uploaded_at": _iso(photo.uploaded_at),
+    }
+
+
+def list_case_evidence_photos(case_id: int):
+    return db.session.scalars(
+        select(PestCaseEvidencePhoto)
+        .where(PestCaseEvidencePhoto.pest_case_id == case_id)
+        .order_by(PestCaseEvidencePhoto.id)
+    ).all()
+
+
 def _pest_case_detail(case: PestCase) -> dict:
     summary = _pest_case_summary(case)
+    inspection = get_inspection_by_case_id(case.id)
+    photos = list_case_evidence_photos(case.id)
     summary.update(
         {
             "symptoms": case.symptoms,
+            "confirmed_pest_name": (
+                inspection.confirmed_pest_name
+                if inspection is not None and inspection.pest_confirmed
+                else None
+            ),
+            "evidence_photos": [_evidence_photo_payload(photo) for photo in photos],
             "farm": _farm_reference(case.farm),
             "reporter": _reporter_reference(case.reporter),
             "updated_at": _iso(case.updated_at),
@@ -216,9 +248,9 @@ def _precheck_payload(payload: dict) -> str | None:
         if field not in payload:
             continue
         value = payload[field]
-        if field == "symptoms" and value in (None, ""):
+        if value in (None, ""):
             continue
-        if not isinstance(value, str) or not value or len(value) > limit:
+        if not isinstance(value, str) or len(value) > limit:
             return "Invalid pest case data."
     if "observed_on" in payload:
         observed = payload["observed_on"]
@@ -339,6 +371,7 @@ def list_pest_cases():
 def get_pest_case(case_id: int):
     try:
         case = get_pest_case_by_id(case_id)
+        detail = _pest_case_detail(case) if case is not None else None
     except SQLAlchemyError:
         db.session.rollback()
         current_app.logger.error("Pest case lookup failed.")
@@ -346,7 +379,7 @@ def get_pest_case(case_id: int):
     if case is None:
         return auth_error("Pest case not found.", 404)
     return jsonify(
-        {"data": {"pest_case": _pest_case_detail(case)}, "message": "Pest case retrieved."}
+        {"data": {"pest_case": detail}, "message": "Pest case retrieved."}
     )
 
 
@@ -384,7 +417,7 @@ def create_pest_case():
     try:
         case = PestCase(
             farm_id=payload["farm_id"],
-            pest_name=payload["pest_name"],
+            pest_name=payload.get("pest_name"),
             symptoms=payload.get("symptoms"),
             observed_on=payload.get("observed_on"),
             reported_area_hectares=payload["reported_area_hectares"],
@@ -517,6 +550,174 @@ def update_pest_case(case_id: int):
         return auth_error("Pest case service unavailable.", 503)
 
     return jsonify({"data": {"pest_case": detail}, "message": "Pest case updated."})
+
+
+def _detect_evidence_type(data: bytes) -> tuple[str, str] | None:
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", ".jpg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", ".png"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", ".webp"
+    return None
+
+
+def _evidence_directory() -> Path:
+    directory = Path(current_app.config["EVIDENCE_UPLOAD_DIR"])
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _remove_saved_evidence(files: list[Path]) -> None:
+    for path in files:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            current_app.logger.error("Evidence photo cleanup failed.")
+
+
+def persist_evidence_photos(photos: list[PestCaseEvidencePhoto]) -> None:
+    db.session.add_all(photos)
+    db.session.commit()
+
+
+def get_case_evidence_photo(case_id: int, photo_id: int):
+    return db.session.scalar(
+        select(PestCaseEvidencePhoto).where(
+            PestCaseEvidencePhoto.id == photo_id,
+            PestCaseEvidencePhoto.pest_case_id == case_id,
+        )
+    )
+
+
+@pest_cases_bp.post("/<int:case_id>/evidence-photos")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def upload_evidence_photos(case_id: int):
+    if request.content_length is not None and request.content_length > (
+        _EVIDENCE_MAX_BYTES * _EVIDENCE_MAX_PHOTOS
+    ):
+        return auth_error("Evidence photos must be at most 5 MiB each.", 400)
+
+    uploaded = [item for item in request.files.getlist("photos") if item.filename]
+    if not uploaded:
+        return auth_error("Select at least one evidence photo.", 400)
+    if len(uploaded) > _EVIDENCE_MAX_PHOTOS:
+        return auth_error("Upload at most 3 evidence photos per case.", 400)
+
+    try:
+        case = get_pest_case_by_id(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence photo case lookup failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if case is None:
+        return auth_error("Pest case not found.", 404)
+    if case.status != PestCaseStatus.REPORTED.value:
+        return auth_error(
+            "Evidence photos can only be added while the case is Reported.", 409
+        )
+
+    try:
+        acquire_pest_case_transition_lock(case_id)
+        existing = list_case_evidence_photos(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence photo count check failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if len(existing) + len(uploaded) > _EVIDENCE_MAX_PHOTOS:
+        db.session.rollback()
+        return auth_error("Upload at most 3 evidence photos per case.", 400)
+
+    prepared: list[tuple[str, str, str, bytes]] = []
+    for item in uploaded:
+        data = item.stream.read(_EVIDENCE_MAX_BYTES + 1)
+        if len(data) > _EVIDENCE_MAX_BYTES:
+            return auth_error("Each evidence photo must be at most 5 MiB.", 400)
+        if not data:
+            return auth_error("Each evidence photo must not be empty.", 400)
+        detected = _detect_evidence_type(data)
+        if detected is None or detected[0] not in _EVIDENCE_TYPES:
+            return auth_error("Evidence photos must be JPEG, PNG, or WebP.", 400)
+        content_type, extension = detected
+        original_name = Path(item.filename or "photo").name[:255] or "photo"
+        prepared.append(
+            (f"{uuid.uuid4().hex}{extension}", original_name, content_type, data)
+        )
+
+    saved_paths: list[Path] = []
+    try:
+        directory = _evidence_directory()
+        photos = []
+        for stored_name, original_name, content_type, data in prepared:
+            path = directory / stored_name
+            path.write_bytes(data)
+            saved_paths.append(path)
+            photos.append(
+                PestCaseEvidencePhoto(
+                    pest_case_id=case.id,
+                    stored_name=stored_name,
+                    original_filename=original_name,
+                    content_type=content_type,
+                    byte_size=len(data),
+                    uploaded_by_user_id=g.current_user.id,
+                )
+            )
+        persist_evidence_photos(photos)
+    except SQLAlchemyError:
+        db.session.rollback()
+        _remove_saved_evidence(saved_paths)
+        current_app.logger.error("Evidence photo save failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    except OSError:
+        db.session.rollback()
+        _remove_saved_evidence(saved_paths)
+        current_app.logger.error("Evidence photo storage failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+
+    return (
+        jsonify(
+            {
+                "data": {"pest_case": _pest_case_detail(case)},
+                "message": "Evidence photos uploaded.",
+            }
+        ),
+        201,
+    )
+
+
+@pest_cases_bp.get("/<int:case_id>/evidence-photos/<int:photo_id>")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def get_evidence_photo(case_id: int, photo_id: int):
+    try:
+        case = get_pest_case_by_id(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence photo case lookup failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if case is None:
+        return auth_error("Evidence photo not found.", 404)
+
+    try:
+        photo = get_case_evidence_photo(case_id, photo_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence photo lookup failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if photo is None:
+        return auth_error("Evidence photo not found.", 404)
+
+    path = Path(current_app.config["EVIDENCE_UPLOAD_DIR"]) / photo.stored_name
+    if not path.is_file():
+        return auth_error("Evidence photo not found.", 404)
+    return send_file(
+        path,
+        mimetype=photo.content_type,
+        as_attachment=False,
+        download_name=photo.original_filename,
+        max_age=0,
+    )
 
 
 @pest_cases_bp.post("/<int:case_id>/submit-for-inspection")
@@ -665,6 +866,7 @@ def schedule_inspection(case_id: int):
             "inspected_on": None,
             "findings": None,
             "pest_confirmed": None,
+            "confirmed_pest_name": None,
             "validated_area_hectares": None,
             "completed_by_user_id": None,
             "completed_at": None,
@@ -987,13 +1189,18 @@ def build_case_timeline(case: PestCase) -> list:
         "case_reported",
         "CASE",
         "Pest case reported",
-        f"{case.pest_name} reported for farm #{case.farm_id}.",
+        f"{case.pest_name or 'Pending identification'} reported for farm #{case.farm_id}.",
         case.reported_at,
         case.observed_on,
         10,
         case.id * 1000 + 1,
         actor=case.reporter,
-        metadata={"status": case.status, "reported_area_hectares": float(case.reported_area_hectares)},
+        metadata={
+            "status": case.status,
+            "suspected_pest": case.pest_name,
+            "symptoms": case.symptoms,
+            "reported_area_hectares": float(case.reported_area_hectares),
+        },
     )
 
     # Submitted for inspection: exact submission time and submitting user are
@@ -1050,6 +1257,7 @@ def build_case_timeline(case: PestCase) -> list:
                 metadata={
                     "inspection_id": inspection.id,
                     "pest_confirmed": bool(inspection.pest_confirmed),
+                    "confirmed_pest_name": inspection.confirmed_pest_name,
                     "validated_area_hectares": float(inspection.validated_area_hectares)
                     if inspection.validated_area_hectares is not None
                     else None,

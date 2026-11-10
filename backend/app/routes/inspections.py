@@ -15,6 +15,7 @@ from app.models import (
     UserRole,
     normalize_findings,
     normalize_inspected_on,
+    normalize_pest_name,
     normalize_validated_area,
     validate_scheduled_for,
 )
@@ -30,6 +31,7 @@ _SCHEDULE_UPDATE_ALLOWED = frozenset({"scheduled_for", "assigned_to_user_id"})
 _FINDINGS_REQUIRED = frozenset(
     {"findings", "pest_confirmed", "validated_area_hectares", "inspected_on"}
 )
+_FINDINGS_ALLOWED = _FINDINGS_REQUIRED | {"confirmed_pest_name"}
 
 # Reuse the per-case transaction-scoped advisory lock from Phase 3B so
 # scheduling, rescheduling, and findings all serialize on the same key as
@@ -161,6 +163,7 @@ def _inspection_detail(inspection: Inspection) -> dict:
         "inspected_on": _iso(inspection.inspected_on),
         "findings": inspection.findings,
         "pest_confirmed": inspection.pest_confirmed,
+        "confirmed_pest_name": inspection.confirmed_pest_name,
         "validated_area_hectares": (
             float(inspection.validated_area_hectares)
             if inspection.validated_area_hectares is not None
@@ -235,6 +238,12 @@ def _precheck_findings(payload: dict) -> str | None:
     inspected = payload.get("inspected_on")
     if not isinstance(inspected, str) or not inspected.strip() or len(inspected) > 32:
         return "Invalid inspection findings."
+    if "confirmed_pest_name" in payload:
+        confirmed_name = payload["confirmed_pest_name"]
+        if confirmed_name not in (None, "") and (
+            not isinstance(confirmed_name, str) or len(confirmed_name) > 120
+        ):
+            return "Invalid inspection findings."
     return None
 
 
@@ -419,7 +428,11 @@ def record_findings(inspection_id: int):
     ):
         return auth_error("Invalid inspection findings.", 400)
     payload = request.get_json(silent=True)
-    if not isinstance(payload, dict) or set(payload) != _FINDINGS_REQUIRED:
+    if (
+        not isinstance(payload, dict)
+        or not _FINDINGS_REQUIRED.issubset(set(payload))
+        or not set(payload).issubset(_FINDINGS_ALLOWED)
+    ):
         return auth_error("Invalid inspection findings.", 400)
     invalid = _precheck_findings(payload)
     if invalid is not None:
@@ -443,11 +456,18 @@ def record_findings(inspection_id: int):
         findings = normalize_findings(payload["findings"])
         inspected_on = normalize_inspected_on(payload["inspected_on"])
         validated = normalize_validated_area(payload["validated_area_hectares"])
+        confirmed_pest_name = normalize_pest_name(
+            payload.get("confirmed_pest_name")
+        )
     except ValueError as exc:
         return auth_error(str(exc), 400)
     pest_confirmed = payload["pest_confirmed"]
     if type(pest_confirmed) is not bool:
         return auth_error("Invalid inspection findings.", 400)
+    if confirmed_pest_name is not None and not pest_confirmed:
+        return auth_error(
+            "Confirmed pest can only be recorded when pest damage is confirmed.", 400
+        )
     if pest_confirmed and (validated is None or validated <= 0):
         return auth_error(
             "Validated area must be positive when pest damage is confirmed.", 400
@@ -506,6 +526,7 @@ def record_findings(inspection_id: int):
     inspection.findings = findings
     inspection.inspected_on = inspected_on
     inspection.pest_confirmed = pest_confirmed
+    inspection.confirmed_pest_name = confirmed_pest_name
     inspection.validated_area_hectares = validated
     inspection.completed_by_user_id = g.current_user.id
     inspection.completed_at = datetime.now(timezone.utc)

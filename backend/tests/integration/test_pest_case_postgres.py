@@ -173,7 +173,7 @@ def test_real_pest_case_workflow_persistence(integration_app, create_integration
         assert set(case) == {
             "id", "farm_id", "pest_name", "symptoms", "observed_on",
             "reported_area_hectares", "status", "farm", "reporter",
-            "reported_at", "updated_at",
+            "reported_at", "updated_at", "confirmed_pest_name", "evidence_photos",
         }
         assert case["status"] == "REPORTED"
         assert case["farm"]["id"] == farm_id

@@ -16,6 +16,7 @@ import {
   markerPresentation,
   type FarmMapFarm,
 } from "@/lib/farm-map";
+import { pestLabel } from "@/lib/presentation";
 
 const BAIS_MONITORING_CENTER: [number, number] = [9.591111, 123.122778];
 const SINGLE_FARM_ZOOM = 15;
@@ -81,7 +82,7 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                   />
                   {presentation.label}
                 </span>
-                {farm.case && <span>Pest: {farm.case.pest_name}</span>}
+                {farm.case && <span>Pest: {pestLabel(farm.case.pest_name)}</span>}
               </div>
             </Tooltip>
             <Popup maxWidth={320} minWidth={230} className="gov-map-popup-shell">
@@ -106,7 +107,7 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                   </div>
                   {farm.case && (
                     <>
-                      <div><dt>Pest</dt><dd>{farm.case.pest_name}</dd></div>
+                      <div><dt>Pest</dt><dd>{pestLabel(farm.case.pest_name)}</dd></div>
                       <div><dt>Case status</dt><dd>{markerPresentation(farm.case.status).label}</dd></div>
                       <div><dt>Reported affected area</dt><dd>{formatArea(farm.case.reported_area_hectares)}</dd></div>
                       <div><dt>Validated affected area</dt><dd>{formatArea(farm.case.validated_area_hectares)}</dd></div>

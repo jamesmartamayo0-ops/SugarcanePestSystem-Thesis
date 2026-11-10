@@ -40,6 +40,7 @@ from app.models.intervention import (
 )
 from app.models.pest_case import (
     PestCase,
+    PestCaseEvidencePhoto,
     PestCaseStatus,
     normalize_observed_on,
     normalize_pest_name,
@@ -56,6 +57,7 @@ __all__ = [
     "Inspection",
     "Intervention",
     "PestCase",
+    "PestCaseEvidencePhoto",
     "PestCaseStatus",
     "User",
     "UserRole",

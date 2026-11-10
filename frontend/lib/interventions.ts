@@ -24,7 +24,7 @@ export type TechnicianSummary = {
 
 export type InterventionCaseRef = {
   id: number;
-  pest_name: string;
+  pest_name: string | null;
   status: PestCaseStatus;
   reported_area_hectares: number;
   farm: {
@@ -144,7 +144,7 @@ function parseCaseRef(value: unknown): InterventionCaseRef {
   const entry = value as Record<string, unknown>;
   if (
     typeof entry.id !== "number" ||
-    typeof entry.pest_name !== "string" ||
+    (entry.pest_name !== null && typeof entry.pest_name !== "string") ||
     !isStatus(entry.status) ||
     typeof entry.reported_area_hectares !== "number"
   ) {
@@ -187,7 +187,7 @@ function parseCaseRef(value: unknown): InterventionCaseRef {
   }
   return {
     id: entry.id as number,
-    pest_name: entry.pest_name as string,
+    pest_name: entry.pest_name as string | null,
     status: entry.status as PestCaseStatus,
     reported_area_hectares: entry.reported_area_hectares as number,
     farm,

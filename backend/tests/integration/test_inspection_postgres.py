@@ -5,8 +5,9 @@ from pathlib import Path
 from threading import Event
 from uuid import uuid4
 
+import pytest
 from flask import request
-from flask_migrate import downgrade, upgrade
+from flask_migrate import downgrade
 from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 
@@ -122,7 +123,7 @@ def technician_id_for(app, username):
         return user_id
 
 
-def test_data_bearing_migration_downgrade_collapses_phase_3c_statuses(
+def test_forward_only_migration_refuses_destructive_downgrade(
     integration_app, create_integration_user
 ):
     _admin_id, admin_name = create_integration_user()
@@ -162,8 +163,24 @@ def test_data_bearing_migration_downgrade_collapses_phase_3c_statuses(
     try:
         with integration_app.app_context():
             db.session.remove()
-            downgrade(directory=str(migrations), revision="e7a3c9d51f24")
-            with db.engine.begin() as connection:
+            # The new feature migration is forward-only so a rollback cannot
+            # silently destroy client evidence records.
+            with pytest.raises(SystemExit):
+                downgrade(directory=str(migrations), revision="e7a3c9d51f24")
+            db.session.remove()
+
+            with db.engine.connect() as connection:
+                assert connection.execute(
+                    text("SELECT version_num FROM alembic_version")
+                ).scalar_one() == "a1f7c3e9b642"
+                assert connection.execute(
+                    text("SELECT to_regclass('public.inspections')")
+                ).scalar_one() == "inspections"
+                assert connection.execute(
+                    text(
+                        "SELECT to_regclass('public.pest_case_evidence_photos')"
+                    )
+                ).scalar_one() == "pest_case_evidence_photos"
                 statuses = connection.execute(
                     text(
                         "SELECT id, status FROM pest_cases "
@@ -171,33 +188,12 @@ def test_data_bearing_migration_downgrade_collapses_phase_3c_statuses(
                     ),
                     {"case_ids": case_ids},
                 ).all()
-                assert statuses == [(case_id, "FOR_INSPECTION") for case_id in case_ids]
-                assert connection.execute(
-                    text("SELECT to_regclass('public.inspections')")
-                ).scalar_one() is None
-
-            with db.engine.connect() as connection:
-                transaction = connection.begin()
-                try:
-                    connection.execute(
-                        text("UPDATE pest_cases SET status = 'FIELD_VALIDATED' WHERE id = :id"),
-                        {"id": case_ids[0]},
-                    )
-                    raise AssertionError("Expected the Phase 3B status constraint to reject Phase 3C status.")
-                except IntegrityError:
-                    transaction.rollback()
+                assert statuses == [
+                    (case_ids[0], "INSPECTION_SCHEDULED"),
+                    (case_ids[1], "FIELD_VALIDATED"),
+                    (case_ids[2], "NOT_CONFIRMED"),
+                ]
     finally:
-        with integration_app.app_context():
-            db.session.remove()
-            upgrade(directory=str(migrations), revision="d6b8f2a1c4e7")
-            with db.engine.connect() as connection:
-                assert connection.execute(
-                    text("SELECT version_num FROM alembic_version")
-                ).scalar_one() == "d6b8f2a1c4e7"
-                assert connection.execute(
-                    text("SELECT to_regclass('public.inspections')")
-                ).scalar_one() == "inspections"
-            db.session.remove()
         cleanup_demo_rows(integration_app)
 
 

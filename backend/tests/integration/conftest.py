@@ -15,8 +15,8 @@ import app.models.inspection as inspection_model
 
 EXPECTED_DATABASE = "sugarcane_pest_test"
 EXPECTED_USER = "sugarcane_app"
-EXPECTED_TABLES = {"alembic_version", "users", "farmers", "farms", "pest_cases", "inspections", "interventions", "follow_ups"}
-EXPECTED_REVISION = "d6b8f2a1c4e7"
+EXPECTED_TABLES = {"alembic_version", "users", "farmers", "farms", "pest_cases", "inspections", "interventions", "follow_ups", "pest_case_evidence_photos"}
+EXPECTED_REVISION = "a1f7c3e9b642"
 TEST_PASSWORD = "Integration-Test-Only-Password-123!"
 
 

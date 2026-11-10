@@ -90,6 +90,9 @@ def configure_app(app: Flask) -> None:
         os.getenv("SESSION_COOKIE_SECURE")
     )
     app.config["DB_PASSWORD_CONFIGURED"] = password is not None
+    app.config["EVIDENCE_UPLOAD_DIR"] = os.getenv("EVIDENCE_UPLOAD_DIR") or str(
+        Path(app.instance_path) / "pest-evidence"
+    )
     app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
         "postgresql+psycopg",
         username=os.getenv("DB_USER", "sugarcane_app"),

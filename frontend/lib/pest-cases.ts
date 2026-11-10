@@ -14,12 +14,24 @@ export type PestCaseStatus =
 export type PestCaseSummary = {
   id: number;
   farm_id: number;
-  pest_name: string;
+  pest_name: string | null;
   reported_area_hectares: number;
   status: PestCaseStatus;
   observed_on: string | null;
   reported_at: string | null;
 };
+
+export type EvidencePhoto = {
+  id: number;
+  original_filename: string;
+  content_type: string;
+  byte_size: number;
+  uploaded_at: string | null;
+};
+
+export function evidencePhotoUrl(caseId: number, photoId: number): string {
+  return `/api/v1/pest-cases/${caseId}/evidence-photos/${photoId}`;
+}
 
 export type PestCaseFarmRef = {
   id: number;
@@ -41,6 +53,8 @@ export type PestCaseReporterRef = {
 
 export type PestCaseDetail = PestCaseSummary & {
   symptoms: string | null;
+  confirmed_pest_name: string | null;
+  evidence_photos: EvidencePhoto[];
   farm: PestCaseFarmRef;
   reporter: PestCaseReporterRef;
   updated_at: string | null;
@@ -95,7 +109,7 @@ function parseSummary(value: unknown): PestCaseSummary {
     typeof entry.farm_id !== "number" ||
     !Number.isSafeInteger(entry.farm_id) ||
     entry.farm_id <= 0 ||
-    typeof entry.pest_name !== "string" ||
+    (entry.pest_name !== null && typeof entry.pest_name !== "string") ||
     typeof entry.reported_area_hectares !== "number" ||
     !Number.isFinite(entry.reported_area_hectares) ||
     (entry.status !== "REPORTED" &&
@@ -115,7 +129,7 @@ function parseSummary(value: unknown): PestCaseSummary {
   return {
     id: entry.id,
     farm_id: entry.farm_id,
-    pest_name: entry.pest_name,
+    pest_name: entry.pest_name as string | null,
     reported_area_hectares: entry.reported_area_hectares,
     status: entry.status,
     observed_on: entry.observed_on,
@@ -133,6 +147,10 @@ function parseDetail(value: unknown, fallback: string): PestCaseDetail {
   const reporter = entry.reporter;
   if (
     (entry.symptoms !== null && typeof entry.symptoms !== "string") ||
+    (entry.confirmed_pest_name !== null &&
+      entry.confirmed_pest_name !== undefined &&
+      typeof entry.confirmed_pest_name !== "string") ||
+    !Array.isArray(entry.evidence_photos) ||
     typeof farm !== "object" ||
     farm === null ||
     typeof reporter !== "object" ||
@@ -141,6 +159,28 @@ function parseDetail(value: unknown, fallback: string): PestCaseDetail {
   ) {
     throw new PestCasesRequestError("unexpected", fallback);
   }
+  const evidencePhotos: EvidencePhoto[] = entry.evidence_photos.map((photo) => {
+    if (typeof photo !== "object" || photo === null) {
+      throw new PestCasesRequestError("unexpected", fallback);
+    }
+    const item = photo as Record<string, unknown>;
+    if (
+      typeof item.id !== "number" ||
+      typeof item.original_filename !== "string" ||
+      typeof item.content_type !== "string" ||
+      typeof item.byte_size !== "number" ||
+      (item.uploaded_at !== null && typeof item.uploaded_at !== "string")
+    ) {
+      throw new PestCasesRequestError("unexpected", fallback);
+    }
+    return {
+      id: item.id,
+      original_filename: item.original_filename,
+      content_type: item.content_type,
+      byte_size: item.byte_size,
+      uploaded_at: item.uploaded_at,
+    };
+  });
   const farmEntry = farm as Record<string, unknown>;
   const farmer = farmEntry.farmer;
   const reporterEntry = reporter as Record<string, unknown>;
@@ -164,6 +204,8 @@ function parseDetail(value: unknown, fallback: string): PestCaseDetail {
   return {
     ...summary,
     symptoms: entry.symptoms as string | null,
+    confirmed_pest_name: (entry.confirmed_pest_name as string | null | undefined) ?? null,
+    evidence_photos: evidencePhotos,
     farm: {
       id: farmEntry.id as number,
       plot_identifier: farmEntry.plot_identifier as string,
@@ -304,7 +346,7 @@ export async function getPestCase(caseId: number): Promise<PestCaseDetail> {
 
 export type CreatePestCaseInput = {
   farm_id: number;
-  pest_name: string;
+  pest_name?: string | null;
   symptoms?: string | null;
   observed_on?: string | null;
   reported_area_hectares: number;
@@ -316,9 +358,11 @@ export async function createPestCase(
 ): Promise<PestCaseDetail> {
   const body: Record<string, unknown> = {
     farm_id: input.farm_id,
-    pest_name: input.pest_name,
     reported_area_hectares: input.reported_area_hectares,
   };
+  if (input.pest_name !== undefined && input.pest_name !== null && input.pest_name.trim() !== "") {
+    body.pest_name = input.pest_name.trim();
+  }
   if (input.symptoms !== undefined && input.symptoms !== null && input.symptoms !== "") {
     body.symptoms = input.symptoms;
   }
@@ -346,7 +390,7 @@ export async function createPestCase(
 
 export type UpdatePestCaseInput = {
   farm_id?: number;
-  pest_name?: string;
+  pest_name?: string | null;
   symptoms?: string | null;
   observed_on?: string | null;
   reported_area_hectares?: number;
@@ -407,5 +451,32 @@ export async function submitForInspection(
     response.status,
     await readPayload(response),
     "Pest case could not be submitted for inspection.",
+  );
+}
+
+export async function uploadEvidencePhotos(
+  caseId: number,
+  files: File[],
+  csrfToken: string,
+): Promise<PestCaseDetail> {
+  const body = new FormData();
+  files.forEach((file) => body.append("photos", file));
+  let response: Response;
+  try {
+    response = await authenticatedFetch(`/api/v1/pest-cases/${caseId}/evidence-photos`, {
+      method: "POST",
+      headers: { "X-CSRF-Token": csrfToken },
+      body,
+    });
+  } catch {
+    throw new PestCasesRequestError("unavailable", "Pest case service is unavailable.");
+  }
+  if (response.status === 201) {
+    return parseSingleCase(await readPayload(response), "Evidence photos could not be uploaded.");
+  }
+  throwForStatus(
+    response.status,
+    await readPayload(response),
+    "Evidence photos could not be uploaded.",
   );
 }

@@ -21,7 +21,7 @@ export type DashboardActionNeeded = {
 
 export type DashboardRecentCase = {
   id: number;
-  pest_name: string;
+  pest_name: string | null;
   status: PestCaseStatus;
   farm_id: number;
   updated_at: string | null;
@@ -134,7 +134,7 @@ function parseSummary(value: unknown): DashboardSummary {
     const item = entry as Record<string, unknown>;
     if (
       typeof item.id !== "number" ||
-      typeof item.pest_name !== "string" ||
+      (item.pest_name !== null && typeof item.pest_name !== "string") ||
       !isStatus(item.status) ||
       typeof item.farm_id !== "number" ||
       (item.updated_at !== null && typeof item.updated_at !== "string")

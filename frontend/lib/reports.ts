@@ -33,7 +33,7 @@ export type ReportCaseRow = {
   farmer: string | null;
   farm: string | null;
   barangay: string | null;
-  pest_name: string;
+  pest_name: string | null;
   current_status: PestCaseStatus;
   reported_at: string | null;
   reported_area_hectares: number;
@@ -182,7 +182,7 @@ function parseReport(value: unknown): OperationalReport {
       (item.farmer !== null && typeof item.farmer !== "string") ||
       (item.farm !== null && typeof item.farm !== "string") ||
       (item.barangay !== null && typeof item.barangay !== "string") ||
-      typeof item.pest_name !== "string" ||
+      (item.pest_name !== null && typeof item.pest_name !== "string") ||
       !isStatus(item.current_status) ||
       (item.reported_at !== null && typeof item.reported_at !== "string") ||
       typeof item.reported_area_hectares !== "number" ||

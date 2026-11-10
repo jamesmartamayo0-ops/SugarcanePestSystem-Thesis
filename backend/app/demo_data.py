@@ -164,6 +164,7 @@ def seed_demo_data() -> dict:
         inspection.inspected_on = today - timedelta(days=inspected_offset)
         inspection.findings = "Demo field findings (synthetic)"
         inspection.pest_confirmed = confirmed
+        inspection.confirmed_pest_name = case.pest_name if confirmed else None
         inspection.validated_area_hectares = Decimal(area)
         inspection.completed_by_user_id = tech.id
         inspection.completed_at = datetime.now(timezone.utc)

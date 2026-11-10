@@ -1,7 +1,9 @@
+import io
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
+from flask import g
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import auth, create_app
@@ -23,6 +25,10 @@ LOGIN = "/api/v1/auth/login"
 ORIGIN = "http://localhost:3000"
 ADMIN_PASSWORD = "admin-password-123"
 TECH_PASSWORD = "technician-pass-123"
+TECH2_PASSWORD = "technician-two-pass-123"
+PHOTOS = lambda case_id: f"/api/v1/pest-cases/{case_id}/evidence-photos"  # noqa: E731
+PHOTO = lambda case_id, photo_id: f"/api/v1/pest-cases/{case_id}/evidence-photos/{photo_id}"  # noqa: E731
+PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 
 
 def _stamp():
@@ -47,7 +53,12 @@ def pest_case(monkeypatch):
         role="TECHNICIAN", is_active=True, auth_version=0,
     )
     technician.set_password(TECH_PASSWORD)
-    users = {admin.id: admin, technician.id: technician}
+    technician_two = User(
+        id=3, username="tech.two", full_name="Tech Two",
+        role="TECHNICIAN", is_active=True, auth_version=0,
+    )
+    technician_two.set_password(TECH2_PASSWORD)
+    users = {admin.id: admin, technician.id: technician, technician_two.id: technician_two}
     clock = {"now": 1_750_000_000}
     locks = {"transitions": 0}
 
@@ -125,6 +136,13 @@ def pest_case(monkeypatch):
         return cases
 
     def fake_get(case_id):
+        # Mirror assignment scope at the route boundary: a technician only
+        # sees a case assigned to them (or one they reported and nobody owns).
+        user = getattr(g, "current_user", None)
+        if user is not None and user.role == "TECHNICIAN" and user.id != 2:
+            case = case_store.get(case_id)
+            if case is not None and case.reported_by_user_id != user.id:
+                return None
         return case_store.get(case_id)
 
     def fake_get_farm(farm_id):
@@ -154,6 +172,8 @@ def pest_case(monkeypatch):
     monkeypatch.setattr(pest_cases_module, "persist_new_pest_case", fake_persist)
     monkeypatch.setattr(pest_cases_module, "commit_pest_case_changes", lambda: None)
     monkeypatch.setattr(pest_cases_module, "acquire_pest_case_transition_lock", fake_lock)
+    monkeypatch.setattr(pest_cases_module, "get_inspection_by_case_id", lambda case_id: None)
+    monkeypatch.setattr(pest_cases_module, "list_case_evidence_photos", lambda case_id: [])
     # Regression fakes keep neighboring modules off the database.
     monkeypatch.setattr(farmers_module, "list_all_farmers", lambda: [farmer])
     monkeypatch.setattr(farms_module, "list_all_farms", lambda farmer_id=None: [farm])
@@ -177,6 +197,12 @@ def login_admin(client):
 
 def login_technician(client):
     response = login(client, "tech.one", TECH_PASSWORD)
+    assert response.status_code == 200
+    return response.get_json()["data"]["csrf_token"]
+
+
+def login_technician_two(client):
+    response = login(client, "tech.two", TECH2_PASSWORD)
     assert response.status_code == 200
     return response.get_json()["data"]["csrf_token"]
 
@@ -253,7 +279,16 @@ def test_list_shape_filters_and_detail(pest_case):
     assert client.get(CASES + "?status=reported").status_code == 400
 
     detail = client.get(CASE(1)).get_json()["data"]["pest_case"]
-    assert set(detail) == set(entry) | {"symptoms", "farm", "reporter", "updated_at"}
+    assert set(detail) == set(entry) | {
+        "symptoms",
+        "confirmed_pest_name",
+        "evidence_photos",
+        "farm",
+        "reporter",
+        "updated_at",
+    }
+    assert detail["confirmed_pest_name"] is None
+    assert detail["evidence_photos"] == []
     assert set(detail["farm"]) == {
         "id", "plot_identifier", "barangay", "area_hectares", "farmer",
     }
@@ -301,6 +336,186 @@ def test_create_case_without_optional_fields(pest_case):
     assert body["observed_on"] is None
 
 
+def test_create_case_without_suspected_pest_is_valid(pest_case):
+    client, store, _, _ = pest_case
+    token = login_technician(client)
+    symptoms = "Naay buslot sa stem ug nag-yellow ang ubang dahon."
+    response = client.post(
+        CASES,
+        json={
+            "farm_id": 1,
+            "symptoms": symptoms,
+            "observed_on": "2026-09-20",
+            "reported_area_hectares": 1.5,
+        },
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 201
+    body = response.get_json()["data"]["pest_case"]
+    assert body["pest_name"] is None
+    assert body["symptoms"] == symptoms
+    assert store[body["id"]].pest_name is None
+    assert store[body["id"]].symptoms == symptoms
+
+    listing = client.get(CASES).get_json()["data"]["pest_cases"]
+    entry = next(item for item in listing if item["id"] == body["id"])
+    assert entry["pest_name"] is None
+    detail = client.get(CASE(body["id"])).get_json()["data"]["pest_case"]
+    assert detail["pest_name"] is None
+    assert detail["symptoms"] == symptoms
+
+
+def test_create_case_with_known_suspected_pest_preserved(pest_case):
+    client, store, _, _ = pest_case
+    token = login_technician(client)
+    response = client.post(
+        CASES,
+        json={"farm_id": 1, "pest_name": "  Stem   Borer ", "reported_area_hectares": 1},
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 201
+    body = response.get_json()["data"]["pest_case"]
+    assert body["pest_name"] == "Stem Borer"
+    assert store[body["id"]].pest_name == "Stem Borer"
+
+
+def test_create_case_blank_suspected_pest_is_unknown(pest_case):
+    client, store, _, _ = pest_case
+    token = login_technician(client)
+    response = client.post(
+        CASES,
+        json={"farm_id": 1, "pest_name": "   ", "reported_area_hectares": 1},
+        headers={"Origin": ORIGIN, "X-CSRF-Token": token},
+    )
+    assert response.status_code == 201
+    body = response.get_json()["data"]["pest_case"]
+    assert body["pest_name"] is None
+    assert store[body["id"]].pest_name is None
+
+
+def _install_evidence_store(monkeypatch):
+    photo_store = []
+
+    def fake_list(case_id):
+        return [photo for photo in photo_store if photo.pest_case_id == case_id]
+
+    def fake_persist(photos):
+        for photo in photos:
+            photo.id = len(photo_store) + 1
+            photo.uploaded_at = _stamp()
+            photo_store.append(photo)
+
+    def fake_get(case_id, photo_id):
+        return next(
+            (
+                photo
+                for photo in photo_store
+                if photo.pest_case_id == case_id and photo.id == photo_id
+            ),
+            None,
+        )
+
+    monkeypatch.setattr(pest_cases_module, "list_case_evidence_photos", fake_list)
+    monkeypatch.setattr(pest_cases_module, "persist_evidence_photos", fake_persist)
+    monkeypatch.setattr(pest_cases_module, "get_case_evidence_photo", fake_get)
+    return photo_store
+
+
+def _photo_headers(token):
+    return {"Origin": ORIGIN, "X-CSRF-Token": token}
+
+
+def _upload(client, token, filename="evidence.png", data=PNG_BYTES, field="photos"):
+    return client.post(
+        PHOTOS(1),
+        data={field: (io.BytesIO(data), filename)},
+        headers=_photo_headers(token),
+        content_type="multipart/form-data",
+    )
+
+
+def test_valid_evidence_photo_upload_and_view(pest_case, monkeypatch, tmp_path):
+    client, _, _, _ = pest_case
+    client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
+    photo_store = _install_evidence_store(monkeypatch)
+    token = login_technician(client)
+
+    response = _upload(client, token)
+    assert response.status_code == 201
+    photos = response.get_json()["data"]["pest_case"]["evidence_photos"]
+    assert len(photos) == 1
+    assert photos[0]["original_filename"] == "evidence.png"
+    assert photos[0]["content_type"] == "image/png"
+    assert photo_store[0].uploaded_by_user_id == 2
+    assert len(list(tmp_path.iterdir())) == 1
+
+    photo_id = photos[0]["id"]
+    viewed = client.get(PHOTO(1, photo_id))
+    assert viewed.status_code == 200
+    assert viewed.mimetype == "image/png"
+    assert viewed.data == PNG_BYTES
+
+
+def test_evidence_photo_invalid_type_rejected(pest_case, monkeypatch, tmp_path):
+    client, _, _, _ = pest_case
+    client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
+    _install_evidence_store(monkeypatch)
+    token = login_technician(client)
+    response = _upload(client, token, filename="notes.txt", data=b"not an image")
+    assert response.status_code == 400
+    assert "JPEG, PNG, or WebP" in response.get_json()["message"]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_evidence_photo_over_limit_rejected(pest_case, monkeypatch, tmp_path):
+    client, _, _, _ = pest_case
+    client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
+    _install_evidence_store(monkeypatch)
+    token = login_technician(client)
+    oversized = b"\xff\xd8\xff" + b"0" * (5 * 1024 * 1024)
+    response = _upload(client, token, data=oversized)
+    assert response.status_code == 400
+    assert "5 MiB" in response.get_json()["message"]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_more_than_three_evidence_photos_rejected(pest_case, monkeypatch, tmp_path):
+    client, _, _, _ = pest_case
+    client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
+    _install_evidence_store(monkeypatch)
+    token = login_technician(client)
+    response = client.post(
+        PHOTOS(1),
+        data={
+            "photos": [
+                (io.BytesIO(PNG_BYTES), "one.png"),
+                (io.BytesIO(PNG_BYTES), "two.png"),
+                (io.BytesIO(PNG_BYTES), "three.png"),
+                (io.BytesIO(PNG_BYTES), "four.png"),
+            ]
+        },
+        headers=_photo_headers(token),
+        content_type="multipart/form-data",
+    )
+    assert response.status_code == 400
+    assert "at most 3" in response.get_json()["message"]
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_unrelated_technician_cannot_view_evidence(pest_case, monkeypatch, tmp_path):
+    client, _, _, _ = pest_case
+    client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
+    _install_evidence_store(monkeypatch)
+    token = login_technician(client)
+    upload = _upload(client, token)
+    photo_id = upload.get_json()["data"]["pest_case"]["evidence_photos"][0]["id"]
+
+    outsider = client.application.test_client()
+    login_technician_two(outsider)
+    response = outsider.get(PHOTO(1, photo_id))
+    assert response.status_code == 404
+
+
 def test_create_case_unknown_farm_returns_404(pest_case):
     client, _, _, _ = pest_case
     token = login_admin(client)
@@ -339,15 +554,12 @@ def test_create_case_area_capped_by_farm_area(pest_case):
     "payload",
     [
         {"farm_id": 1, "pest_name": "Rats"},
-        {"farm_id": 1, "reported_area_hectares": 1},
         {"pest_name": "Rats", "reported_area_hectares": 1},
         {"farm_id": 1, "pest_name": "Rats", "reported_area_hectares": 1, "extra": 1},
         {"farm_id": 1, "pest_name": "Rats", "reported_area_hectares": 1, "status": "REPORTED"},
         {"farm_id": 1, "pest_name": "Rats", "reported_area_hectares": 1, "status": "FOR_INSPECTION"},
         {"farm_id": "1", "pest_name": "Rats", "reported_area_hectares": 1},
         {"farm_id": True, "pest_name": "Rats", "reported_area_hectares": 1},
-        {"farm_id": 1, "pest_name": "", "reported_area_hectares": 1},
-        {"farm_id": 1, "pest_name": "   ", "reported_area_hectares": 1},
         {"farm_id": 1, "pest_name": "x" * 121, "reported_area_hectares": 1},
         {"farm_id": 1, "pest_name": 123, "reported_area_hectares": 1},
         {"farm_id": 1, "pest_name": "Rats", "reported_area_hectares": 0},
@@ -508,8 +720,8 @@ def test_neighboring_farmer_farm_endpoints_regressed(pest_case):
 
 def test_model_normalization_helpers():
     assert normalize_pest_name("  Asiatic   Corn\nBorer ") == "Asiatic Corn Borer"
-    with pytest.raises(ValueError):
-        normalize_pest_name("   ")
+    assert normalize_pest_name("   ") is None
+    assert normalize_pest_name(None) is None
     assert normalize_symptoms("") is None
     assert normalize_symptoms(None) is None
     assert normalize_observed_on("") is None

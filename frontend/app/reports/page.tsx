@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { workflowLabel } from "@/lib/presentation";
+import { pestLabel, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icons";
 import { PageHeader, Seal, SessionNotice } from "@/components/ui";
@@ -484,7 +484,7 @@ export default function ReportsPage() {
                       {report.cases.map((entry) => (
                         <tr key={entry.case_id}>
                           <td>
-                            <span className="gov-cell-primary">{entry.pest_name}</span>
+                            <span className="gov-cell-primary">{pestLabel(entry.pest_name)}</span>
                             <span className="gov-cell-meta">Case #{entry.case_id}</span>
                             <span className="gov-cell-meta">
                               Reported {formatRecordDate(entry.reported_at)} ·{" "}

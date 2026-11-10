@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatDisplayDate, workflowLabel, workflowMessage } from "@/lib/presentation";
+import { formatDisplayDate, pestLabel, workflowLabel, workflowMessage } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icons";
 import {
@@ -30,6 +30,11 @@ import {
   listPestCases,
   type PestCaseSummary,
 } from "@/lib/pest-cases";
+import {
+  canManageInspectionSchedule,
+  canRecordInspection,
+  isInspectionPending,
+} from "@/lib/inspection-permissions";
 
 const AREA_PATTERN = /^\d+(\.\d{1,2})?$/;
 
@@ -67,16 +72,6 @@ function manilaTodayInputValue(): string {
   }).formatToParts(new Date());
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
-}
-
-function isPending(item: InspectionDetail): boolean {
-  return (
-    item.inspected_on === null &&
-    item.findings === null &&
-    item.pest_confirmed === null &&
-    item.completed_at === null &&
-    item.pest_case.status === "INSPECTION_SCHEDULED"
-  );
 }
 
 export default function InspectionsPage() {
@@ -369,12 +364,14 @@ export default function InspectionsPage() {
     const data = new FormData(event.currentTarget);
     const findingsRaw = data.get("findings");
     const confirmedRaw = data.get("pest_confirmed");
+    const confirmedPestRaw = data.get("confirmed_pest_name");
     const areaRaw = data.get("validated_area_hectares");
     const inspectedRaw = data.get("inspected_on");
     if (
       typeof findingsRaw !== "string" ||
       findingsRaw.trim() === "" ||
       (confirmedRaw !== "true" && confirmedRaw !== "false") ||
+      typeof confirmedPestRaw !== "string" ||
       typeof areaRaw !== "string" ||
       typeof inspectedRaw !== "string" ||
       inspectedRaw.trim() === ""
@@ -385,6 +382,10 @@ export default function InspectionsPage() {
       return;
     }
     const pestConfirmed = confirmedRaw === "true";
+    if (!pestConfirmed && confirmedPestRaw.trim() !== "") {
+      setActionError("Confirmed pest can only be recorded when damage is confirmed.");
+      return;
+    }
     const area = parseArea(areaRaw, true);
     if (area === null) {
       setActionError("Validated area must be 0–10000 ha with up to 2 decimals.");
@@ -406,6 +407,10 @@ export default function InspectionsPage() {
         {
           findings: findingsRaw.trim(),
           pest_confirmed: pestConfirmed,
+          confirmed_pest_name:
+            pestConfirmed && confirmedPestRaw.trim() !== ""
+              ? confirmedPestRaw.trim()
+              : null,
           validated_area_hectares: area,
           inspected_on: inspectedRaw.trim(),
         },
@@ -440,15 +445,8 @@ export default function InspectionsPage() {
     return <SessionNotice status={auth.status} />;
   }
 
-  const canRecord = (item: InspectionDetail): boolean => {
-    if (!isPending(item)) {
-      return false;
-    }
-    if (role === "ADMIN") {
-      return true;
-    }
-    return role === "TECHNICIAN" && item.assigned_to_user_id === userId;
-  };
+  const canRecord = (item: InspectionDetail): boolean =>
+    canRecordInspection(role, userId, item);
   const today = manilaTodayInputValue();
 
   // Confirmations about the open inspection are shown beside it, not in the form above.
@@ -512,7 +510,7 @@ export default function InspectionsPage() {
                   </option>
                   {eligibleCases.map((entry) => (
                     <option key={entry.id} value={entry.id}>
-                      #{entry.id} — {entry.pest_name} ({entry.reported_area_hectares.toFixed(2)} ha)
+                      #{entry.id} — {pestLabel(entry.pest_name)} ({entry.reported_area_hectares.toFixed(2)} ha)
                     </option>
                   ))}
                 </select>
@@ -665,7 +663,7 @@ export default function InspectionsPage() {
                     >
                       <td className="gov-cell-id">#{entry.id}</td>
                       <td>
-                        <span className="gov-cell-primary">{entry.pest_case.pest_name}</span>
+                        <span className="gov-cell-primary">{pestLabel(entry.pest_case.pest_name)}</span>
                         <span className="gov-cell-meta">
                           Case #{entry.pest_case_id} · {entry.pest_case.farm?.plot_identifier ?? "—"} —{" "}
                           {entry.pest_case.farm?.farmer?.full_name ?? "—"}
@@ -725,7 +723,7 @@ export default function InspectionsPage() {
                     <p className="gov-record-eyebrow">
                       Inspection #{detail.id} · Case #{detail.pest_case_id}
                     </p>
-                    <h2 className="gov-record-title">{detail.pest_case.pest_name}</h2>
+                    <h2 className="gov-record-title">{pestLabel(detail.pest_case.pest_name)}</h2>
                   </div>
                   <span className="gov-table-actions">
                     <span className={statusBadge(detail.pest_case.status)}>
@@ -778,8 +776,8 @@ export default function InspectionsPage() {
                     </div>
                     <dl className="gov-detail-grid">
                       <div>
-                        <dt className="gov-detail-label">Reported pest</dt>
-                        <dd className="gov-detail-value">{detail.pest_case.pest_name}</dd>
+                        <dt className="gov-detail-label">Suspected Pest (as reported)</dt>
+                        <dd className="gov-detail-value">{pestLabel(detail.pest_case.pest_name)}</dd>
                       </div>
                       <div>
                         <dt className="gov-detail-label">Reported area</dt>
@@ -805,7 +803,7 @@ export default function InspectionsPage() {
                       </h3>
                       <span className={detail.pest_confirmed === null ? "gov-status-badge" : detail.pest_confirmed ? "gov-status-badge gov-status-field-validated" : "gov-status-badge gov-status-not-confirmed"}>
                       {detail.pest_confirmed === null
-                        ? "Pending"
+                        ? "Pending Field Validation"
                         : detail.pest_confirmed
                           ? `Confirmed — ${(detail.validated_area_hectares ?? 0).toFixed(2)} ha`
                           : "Not confirmed — 0.00 ha"}
@@ -818,6 +816,15 @@ export default function InspectionsPage() {
                       </p>
                     ) : (
                       <dl className="gov-detail-grid">
+                        <div>
+                          <dt className="gov-detail-label">Confirmed Pest</dt>
+                          <dd className="gov-detail-value">
+                            {detail.pest_confirmed
+                              ? detail.confirmed_pest_name ??
+                                "Confirmed (pest name not recorded)"
+                              : "Not applicable — infestation not confirmed"}
+                          </dd>
+                        </div>
                         <div>
                           <dt className="gov-detail-label">Validated affected area</dt>
                           <dd className="gov-detail-value">
@@ -839,8 +846,9 @@ export default function InspectionsPage() {
                   </div>
                 </div>
 
-                {isPending(detail) && role === "ADMIN" ? (
+                {isInspectionPending(detail) ? (
                   <div className="gov-form">
+                    {canManageInspectionSchedule(role) && (
                     <div className="gov-workflow-panel">
                       <h3 className="gov-record-title">
                         Reschedule or reassign
@@ -903,6 +911,7 @@ export default function InspectionsPage() {
                         </div>
                       </form>
                     </div>
+                    )}
                     {canRecord(detail) ? (
                       <div className="gov-workflow-panel">
                         <div className="gov-panel-heading">
@@ -962,6 +971,28 @@ export default function InspectionsPage() {
                               <option value="true">Yes — damage confirmed</option>
                               <option value="false">No — not confirmed</option>
                             </select>
+                          </div>
+                          <div className="gov-field">
+                            <label
+                              htmlFor="confirmed_pest_name"
+                              className="gov-label"
+                            >
+                              Confirmed Pest <span className="gov-label-optional">(optional)</span>
+                            </label>
+                            <input
+                              id="confirmed_pest_name"
+                              name="confirmed_pest_name"
+                              type="text"
+                              autoComplete="off"
+                              maxLength={120}
+                              placeholder="e.g. Stem Borer"
+                              aria-describedby="confirmed_pest_help"
+                              className="gov-input"
+                            />
+                            <p id="confirmed_pest_help" className="gov-field-help">
+                              Official identification recorded during field validation. Leave
+                              blank only if the pest could not be identified in the field.
+                            </p>
                           </div>
                           <div className="gov-field">
                             <label

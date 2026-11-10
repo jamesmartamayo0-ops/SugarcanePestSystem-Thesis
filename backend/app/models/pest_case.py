@@ -37,12 +37,16 @@ _ALLOWED_STATUSES = frozenset({status.value for status in PestCaseStatus})
 _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 
-def normalize_pest_name(value: str) -> str:
+def normalize_pest_name(value: str | None) -> str | None:
+    if value is None:
+        return None
     if not isinstance(value, str):
-        raise ValueError("Pest name must be 1-120 characters.")
+        raise ValueError("Pest name must be at most 120 characters.")
     cleaned = _WHITESPACE_PATTERN.sub(" ", value.strip())
-    if not cleaned or len(cleaned) > 120:
-        raise ValueError("Pest name must be 1-120 characters.")
+    if not cleaned:
+        return None
+    if len(cleaned) > 120:
+        raise ValueError("Pest name must be at most 120 characters.")
     return cleaned
 
 
@@ -110,7 +114,9 @@ class PestCase(db.Model):
     farm_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("farms.id", ondelete="RESTRICT"), nullable=False, index=True
     )
-    pest_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    # Null means the farmer/staff did not know the pest; a technician may
+    # confirm the official identification during field validation.
+    pest_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     symptoms: Mapped[str | None] = mapped_column(Text, nullable=True)
     observed_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     reported_area_hectares: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
@@ -151,7 +157,7 @@ class PestCase(db.Model):
         return value
 
     @validates("pest_name")
-    def _validate_pest_name(self, _key: str, value: str) -> str:
+    def _validate_pest_name(self, _key: str, value: str | None) -> str | None:
         return normalize_pest_name(value)
 
     @validates("symptoms")
@@ -174,3 +180,50 @@ class PestCase(db.Model):
 
     def __repr__(self) -> str:
         return f"<PestCase id={self.id}>"
+
+
+class PestCaseEvidencePhoto(db.Model):
+    """Bounded evidence photo attached to the initial pest report.
+
+    Only case-authorized users can retrieve the stored file through the API.
+    The file itself lives under the configured evidence directory so the
+    deployment can move storage without touching the database schema.
+    """
+
+    __tablename__ = "pest_case_evidence_photos"
+    __table_args__ = (
+        CheckConstraint("byte_size > 0", name="ck_evidence_photos_size_positive"),
+        CheckConstraint(
+            "byte_size <= 5242880", name="ck_evidence_photos_size_max"
+        ),
+        CheckConstraint(
+            "content_type IN ('image/jpeg', 'image/png', 'image/webp')",
+            name="ck_evidence_photos_content_type",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    pest_case_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("pest_cases.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    stored_name: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploaded_by_user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+    )
+
+    pest_case: Mapped["PestCase"] = relationship("PestCase")
+
+    def __repr__(self) -> str:
+        return f"<PestCaseEvidencePhoto id={self.id} case={self.pest_case_id}>"
