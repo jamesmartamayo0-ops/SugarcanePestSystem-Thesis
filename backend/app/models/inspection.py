@@ -46,6 +46,13 @@ def normalize_scheduled_for(value: date | str) -> date:
         raise ValueError("Scheduled date must use YYYY-MM-DD format.") from None
 
 
+def validate_scheduled_for(value: date | str) -> date:
+    scheduled = normalize_scheduled_for(value)
+    if scheduled < manila_today():
+        raise ValueError("Scheduled inspection date cannot be in the past.")
+    return scheduled
+
+
 def normalize_inspected_on(value: date | str | None) -> date | None:
     if value is None:
         return None

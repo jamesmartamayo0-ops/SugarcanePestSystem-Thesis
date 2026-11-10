@@ -246,6 +246,39 @@ def test_real_inspection_scheduling_workflow(integration_app, create_integration
         cleanup_demo_rows(integration_app)
 
 
+def test_eligible_case_list_excludes_cases_with_existing_inspections(
+    integration_app, create_integration_user
+):
+    _, admin_name = create_integration_user(role=UserRole.ADMIN)
+    client = integration_app.test_client()
+    token = login(client, admin_name).get_json()["data"]["csrf_token"]
+    headers = auth_headers(token)
+    try:
+        _, farm_id = seed_farm(client, headers)
+        eligible_id = seed_for_inspection_case(client, headers, farm_id, demo_value("eligible"))
+        scheduled_id = seed_for_inspection_case(client, headers, farm_id, demo_value("scheduled"))
+        tech_id, _ = create_integration_user(role=UserRole.TECHNICIAN)
+        scheduled = schedule_for_case(client, headers, scheduled_id, tech_id)
+        assert scheduled.status_code == 201
+
+        with integration_app.app_context():
+            db.session.execute(
+                PestCase.__table__.update()
+                .where(PestCase.id == scheduled_id)
+                .values(status="FOR_INSPECTION")
+            )
+            db.session.commit()
+            db.session.remove()
+
+        listed = client.get(f"{CASES}?status=FOR_INSPECTION", headers=headers)
+        assert listed.status_code == 200
+        listed_ids = {item["id"] for item in listed.get_json()["data"]["pest_cases"]}
+        assert eligible_id in listed_ids
+        assert scheduled_id not in listed_ids
+    finally:
+        cleanup_demo_rows(integration_app)
+
+
 def test_schedule_validates_technician_and_case(integration_app, create_integration_user):
     admin_id, admin_name = create_integration_user(role=UserRole.ADMIN)
     _, tech_name = create_integration_user(role=UserRole.TECHNICIAN)

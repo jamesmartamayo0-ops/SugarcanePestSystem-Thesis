@@ -21,6 +21,7 @@ from app.models import (
     normalize_pest_name,
     normalize_reported_area,
     normalize_scheduled_for,
+    validate_scheduled_for,
     normalize_symptoms,
 )
 from app.models.intervention import (
@@ -121,6 +122,12 @@ def list_all_pest_cases(
         statement = statement.where(PestCase.farm_id == farm_id)
     if status is not None:
         statement = statement.where(PestCase.status == status)
+        if status == PestCaseStatus.FOR_INSPECTION.value:
+            statement = statement.where(
+                ~select(Inspection.id)
+                .where(Inspection.pest_case_id == PestCase.id)
+                .exists()
+            )
     if farmer_id is not None or search is not None:
         statement = statement.join(Farm, Farm.id == PestCase.farm_id).join(
             Farmer, Farmer.id == Farm.farmer_id
@@ -566,7 +573,7 @@ def get_inspection_by_case_id(case_id: int):
 
 @pest_cases_bp.post("/<int:case_id>/schedule-inspection")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def schedule_inspection(case_id: int):
     if not request.is_json or (
         request.content_length is not None and request.content_length > 4096
@@ -583,7 +590,7 @@ def schedule_inspection(case_id: int):
         return auth_error("Invalid inspection data.", 400)
 
     try:
-        scheduled_for = normalize_scheduled_for(raw_date)
+        scheduled_for = validate_scheduled_for(raw_date)
     except ValueError as exc:
         return auth_error(str(exc), 400)
 
@@ -608,7 +615,11 @@ def schedule_inspection(case_id: int):
         return auth_error("Inspection service unavailable.", 503)
     if existing is not None:
         db.session.rollback()
-        return auth_error("Inspection has already been scheduled for this case.", 409)
+        return auth_error(
+            "This case already has a scheduled inspection. Open the existing inspection "
+            "to reschedule the date or change the assigned technician.",
+            409,
+        )
 
     if case.status != PestCaseStatus.FOR_INSPECTION.value:
         db.session.rollback()
@@ -657,13 +668,19 @@ def schedule_inspection(case_id: int):
             "validated_area_hectares": None,
             "completed_by_user_id": None,
             "completed_at": None,
+            "created_at": _iso(inspection.created_at),
+            "updated_at": _iso(inspection.updated_at),
             "pest_case": _pest_case_detail(case),
         }
         commit_pest_case_changes()
     except IntegrityError:
         db.session.rollback()
         current_app.logger.error("Inspection scheduling integrity failure.")
-        return auth_error("Inspection has already been scheduled for this case.", 409)
+        return auth_error(
+            "This case already has a scheduled inspection. Open the existing inspection "
+            "to reschedule the date or change the assigned technician.",
+            409,
+        )
     except SQLAlchemyError:
         db.session.rollback()
         current_app.logger.error("Inspection scheduling failed.")

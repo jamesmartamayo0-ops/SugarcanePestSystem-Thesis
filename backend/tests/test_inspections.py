@@ -13,6 +13,7 @@ from app.models.inspection import (
     normalize_scheduled_for,
     normalize_validated_area,
 )
+import app.models.inspection as inspection_model
 from app.routes import inspections as inspections_module
 from app.routes import pest_cases as pest_cases_module
 from app.routes import farmers as farmers_module
@@ -41,6 +42,7 @@ def inspection_client(monkeypatch):
     )
     app = create_app()
     app.testing = True
+    monkeypatch.setattr(inspection_model, "manila_today", lambda: date(2026, 10, 10))
 
     admin = User(id=1, username="admin.one", full_name="Admin One", role="ADMIN", is_active=True, auth_version=0)
     admin.set_password(ADMIN_PASSWORD)
@@ -296,6 +298,8 @@ def test_schedule_inspection_happy_path_and_lock(inspection_client):
     assert body["scheduled_for"] == "2026-10-15"
     assert body["assigned_to_user_id"] == 2
     assert body["scheduled_by_user_id"] == 1
+    assert body["created_at"] is not None
+    assert body["updated_at"] is not None
     assert cases[1].status == "INSPECTION_SCHEDULED"
     assert len(locks["cases"]) == before + 1
     assert locks["cases"][-1] == 1
@@ -316,7 +320,10 @@ def test_schedule_rejects_invalid_states_and_duplicates(inspection_client):
     assert client.post(SCHEDULE(1), json=payload, headers=headers).status_code == 201
     dup = client.post(SCHEDULE(1), json=payload, headers=headers)
     assert dup.status_code == 409
-    assert dup.get_json() == {"data": None, "message": "Inspection has already been scheduled for this case."}
+    assert dup.get_json() == {
+        "data": None,
+        "message": "This case already has a scheduled inspection. Open the existing inspection to reschedule the date or change the assigned technician.",
+    }
     assert client.post(SCHEDULE(9999), json=payload, headers=headers).status_code == 404
 
 
@@ -336,6 +343,35 @@ def test_schedule_validates_technician(inspection_client):
     assert client.post(SCHEDULE(1), json={"scheduled_for": "2026-10-15"}, headers=headers).status_code == 400
     assert client.post(SCHEDULE(1), json={"scheduled_for": "not-a-date", "assigned_to_user_id": 2}, headers=headers).status_code == 400
     assert client.post(SCHEDULE(1), json={"scheduled_for": "2026-10-15", "assigned_to_user_id": 2, "status": "INSPECTION_SCHEDULED"}, headers=headers).status_code == 400
+
+
+def test_schedule_accepts_today_and_future_but_rejects_past(inspection_client, monkeypatch):
+    client, _, _, _, _, _ = inspection_client
+    token = login_admin(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    monkeypatch.setattr(inspection_model, "manila_today", lambda: date(2026, 10, 10))
+
+    past = client.post(
+        SCHEDULE(1),
+        json={"scheduled_for": "2026-10-09", "assigned_to_user_id": 2},
+        headers=headers,
+    )
+    assert past.status_code == 400
+    assert past.get_json()["message"] == "Scheduled inspection date cannot be in the past."
+
+    today = client.post(
+        SCHEDULE(1),
+        json={"scheduled_for": "2026-10-10", "assigned_to_user_id": 2},
+        headers=headers,
+    )
+    assert today.status_code == 201
+
+    future = client.post(
+        SCHEDULE(5),
+        json={"scheduled_for": "2026-10-11", "assigned_to_user_id": 2},
+        headers=headers,
+    )
+    assert future.status_code == 201
 
 
 def test_list_and_detail_filters(inspection_client):
@@ -373,6 +409,49 @@ def test_reschedule_only_while_pending(inspection_client):
     assert client.put(RESCHEDULE(9999), json={"scheduled_for": "2026-10-20"}, headers=headers).status_code == 404
     assert client.put(RESCHEDULE(10), json={}, headers=headers).status_code == 400
     assert client.put(RESCHEDULE(10), json={"status": "FIELD_VALIDATED"}, headers=headers).status_code == 400
+
+
+def test_only_administrator_can_reschedule_or_reassign(inspection_client):
+    client, cases, inspections, _, _, _ = inspection_client
+    token = login_tech(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    response = client.put(
+        RESCHEDULE(10),
+        json={"scheduled_for": "2026-10-20", "assigned_to_user_id": 3},
+        headers=headers,
+    )
+    assert response.status_code == 403
+    assert inspections[10].scheduled_for == date(2026, 10, 12)
+    assert inspections[10].assigned_to_user_id == 2
+    assert cases[3].status == "INSPECTION_SCHEDULED"
+
+
+def test_only_administrator_can_create_an_inspection_schedule(inspection_client):
+    client, cases, inspections, _, _, _ = inspection_client
+    token = login_tech(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    response = client.post(
+        SCHEDULE(1),
+        json={"scheduled_for": "2026-10-20", "assigned_to_user_id": 2},
+        headers=headers,
+    )
+    assert response.status_code == 403
+    assert cases[1].status == "FOR_INSPECTION"
+    assert all(item.pest_case_id != 1 for item in inspections.values())
+
+
+def test_pending_reschedule_rejects_past_date(inspection_client, monkeypatch):
+    client, _, _, _, _, _ = inspection_client
+    token = login_admin(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    monkeypatch.setattr(inspection_model, "manila_today", lambda: date(2026, 10, 10))
+    response = client.put(
+        RESCHEDULE(10),
+        json={"scheduled_for": "2026-10-09"},
+        headers=headers,
+    )
+    assert response.status_code == 400
+    assert response.get_json()["message"] == "Scheduled inspection date cannot be in the past."
 
 
 def test_record_findings_confirmed_and_not_confirmed(inspection_client):

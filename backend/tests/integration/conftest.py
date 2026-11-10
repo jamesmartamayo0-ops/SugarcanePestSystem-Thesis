@@ -1,4 +1,5 @@
 import os
+from datetime import date
 from pathlib import Path
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from sqlalchemy import delete, func, select, text, update
 from app import create_app
 from app.extensions import db
 from app.models import User, UserRole
+import app.models.inspection as inspection_model
 
 
 EXPECTED_DATABASE = "sugarcane_pest_test"
@@ -16,6 +18,11 @@ EXPECTED_USER = "sugarcane_app"
 EXPECTED_TABLES = {"alembic_version", "users", "farmers", "farms", "pest_cases", "inspections", "interventions", "follow_ups"}
 EXPECTED_REVISION = "d6b8f2a1c4e7"
 TEST_PASSWORD = "Integration-Test-Only-Password-123!"
+
+
+@pytest.fixture(autouse=True)
+def fixed_inspection_schedule_date(monkeypatch):
+    monkeypatch.setattr(inspection_model, "manila_today", lambda: date(2026, 10, 10))
 
 
 def require_integration_environment() -> None:

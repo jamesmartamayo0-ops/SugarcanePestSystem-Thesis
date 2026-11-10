@@ -15,8 +15,8 @@ from app.models import (
     UserRole,
     normalize_findings,
     normalize_inspected_on,
-    normalize_scheduled_for,
     normalize_validated_area,
+    validate_scheduled_for,
 )
 from app.scoping import (
     apply_inspection_scope,
@@ -324,7 +324,7 @@ def get_inspection(inspection_id: int):
 
 @inspections_bp.put("/<int:inspection_id>/schedule")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def reschedule_inspection(inspection_id: int):
     if not request.is_json or (
         request.content_length is not None and request.content_length > 4096
@@ -355,7 +355,7 @@ def reschedule_inspection(inspection_id: int):
     # fails fast without holding the per-case advisory lock.
     try:
         new_scheduled = (
-            normalize_scheduled_for(payload["scheduled_for"])
+            validate_scheduled_for(payload["scheduled_for"])
             if "scheduled_for" in payload
             else None
         )

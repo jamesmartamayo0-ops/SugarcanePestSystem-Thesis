@@ -16,6 +16,7 @@ from app.models.inspection import (
     normalize_findings,
     normalize_inspected_on,
     normalize_scheduled_for,
+    validate_scheduled_for,
     normalize_validated_area,
 )
 from app.models.follow_up import (

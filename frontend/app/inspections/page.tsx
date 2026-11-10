@@ -4,8 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { workflowLabel, workflowMessage } from "@/lib/presentation";
+import { formatDisplayDate, workflowLabel, workflowMessage } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import { Icon } from "@/components/icons";
+import {
+  PageHeader,
+  RequiredLegend,
+  SessionNotice,
+  useRevealOnChange,
+} from "@/components/ui";
+import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   InspectionsRequestError,
   getInspection,
@@ -50,6 +58,17 @@ function statusBadge(status: string): string {
   return `gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`;
 }
 
+function manilaTodayInputValue(): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 function isPending(item: InspectionDetail): boolean {
   return (
     item.inspected_on === null &&
@@ -83,6 +102,7 @@ export default function InspectionsPage() {
   const authenticated = auth.status === "authenticated";
   const role = auth.status === "authenticated" ? auth.user.role : null;
   const userId = auth.status === "authenticated" ? auth.user.id : null;
+  const detailRef = useRevealOnChange<HTMLElement>(loadingDetail ? null : selectedId);
 
   useEffect(() => {
     if (auth.status === "unauthenticated") {
@@ -217,6 +237,7 @@ export default function InspectionsPage() {
     const dateRaw = data.get("scheduled_for");
     const caseId = typeof caseRaw === "string" ? Number(caseRaw) : NaN;
     const technicianId = typeof techRaw === "string" ? Number(techRaw) : NaN;
+    const today = manilaTodayInputValue();
     if (
       !Number.isSafeInteger(caseId) ||
       caseId <= 0 ||
@@ -226,6 +247,10 @@ export default function InspectionsPage() {
       dateRaw.trim() === ""
     ) {
       setFormError("Select an eligible case, a technician, and an inspection date.");
+      return;
+    }
+    if (dateRaw.trim() < today) {
+      setFormError("Scheduled inspection date cannot be in the past.");
       return;
     }
     setScheduling(true);
@@ -243,6 +268,19 @@ export default function InspectionsPage() {
       setEligibleCases((current) => current.filter((entry) => entry.id !== caseId));
       setNotice(`Inspection #${created.id} was scheduled.`);
       event.currentTarget.reset();
+
+      try {
+        const [loadedInspections, loadedCases] = await Promise.all([
+          listInspections(),
+          listPestCases({ status: "FOR_INSPECTION" }),
+        ]);
+        setInspections(loadedInspections);
+        setEligibleCases(loadedCases);
+      } catch {
+        setNotice(
+          "Inspection was scheduled successfully, but the list could not be refreshed. Refresh the page to see the latest record.",
+        );
+      }
     } catch (failure) {
       if (
         failure instanceof InspectionsRequestError &&
@@ -273,7 +311,12 @@ export default function InspectionsPage() {
     const dateRaw = data.get("scheduled_for");
     const techRaw = data.get("assigned_to_user_id");
     const payload: { scheduled_for?: string; assigned_to_user_id?: number } = {};
+    const today = manilaTodayInputValue();
     if (typeof dateRaw === "string" && dateRaw.trim() !== "") {
+      if (dateRaw.trim() < today) {
+        setActionError("Scheduled inspection date cannot be in the past.");
+        return;
+      }
       payload.scheduled_for = dateRaw.trim();
     }
     if (typeof techRaw === "string" && techRaw.trim() !== "") {
@@ -393,31 +436,8 @@ export default function InspectionsPage() {
     }
   }
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
   const canRecord = (item: InspectionDetail): boolean => {
@@ -429,41 +449,50 @@ export default function InspectionsPage() {
     }
     return role === "TECHNICIAN" && item.assigned_to_user_id === userId;
   };
+  const today = manilaTodayInputValue();
+
+  // Confirmations about the open inspection are shown beside it, not in the form above.
+  const detailNotice =
+    notice !== null && detail !== null && notice.includes(`#${detail.id} `) ? notice : null;
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Inspections</h1>
-        <p className="gov-page-description">
-          Schedule initial field inspections, reassign pending visits, and record
-          validated findings. Reported area stays unchanged; validated area is the
-          inspector&apos;s independent measurement.
-        </p>
-        <div className="gov-page-links">
-          <Link
-            href="/pest-cases"
-            className="gov-activity-link"
-          >
-            View pest cases
-          </Link>
-          <Link
-            href="/reports"
-            className="gov-activity-link"
-          >
-            View reports
-          </Link>
-        </div>
-      </header>
+      <PageHeader
+        title="Inspections"
+        description="Schedule initial field inspections, reassign pending visits, and record validated findings. Reported area stays unchanged; validated area is the inspector's independent measurement."
+        related={[
+          { href: "/pest-cases", label: "Pest Cases" },
+          { href: "/interventions", label: "Interventions" },
+          { href: "/reports", label: "Reports" },
+        ]}
+      />
+      <WorkflowSteps current="inspection" />
 
-        <section aria-label="Schedule inspection" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Schedule inspection</h2>
+        {role === "ADMIN" && (
+        <section aria-labelledby="schedule-heading" className="gov-card gov-record-section">
+          <p className="gov-record-eyebrow">Inspection assignment</p>
+          <h2 id="schedule-heading" className="gov-record-title">
+            Schedule inspection
+          </h2>
+          <p className="gov-record-intro">
+            Cases submitted for inspection are listed here. Choose the case, assign an
+            Agriculture Technician, and set the inspection date.
+          </p>
           {eligibleCases.length === 0 && !loading ? (
             <p role="status" className="gov-empty-state">
               No cases are waiting for inspection scheduling. Submit a Reported case
-              for inspection first.
+              for inspection first.{" "}
+              <Link href="/pest-cases" className="gov-activity-link">
+                Go to pest cases
+              </Link>
             </p>
           ) : (
-            <form onSubmit={handleSchedule} className="gov-form gov-form-grid">
+            <form
+              noValidate
+              onSubmit={handleSchedule}
+              className="gov-form gov-form-grid"
+            >
+              <RequiredLegend />
               <div className="gov-field">
                 <label
                   htmlFor="pest_case_id"
@@ -517,15 +546,20 @@ export default function InspectionsPage() {
                   htmlFor="scheduled_for"
                   className="gov-label"
                 >
-                  Inspection date <span className="gov-required" aria-hidden="true">*</span>
+                  Scheduled inspection date <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <input
                   id="scheduled_for"
                   name="scheduled_for"
                   type="date"
                   required
+                  min={today}
+                  aria-describedby="scheduled_for_help"
                   className="gov-input"
                 />
+                <p id="scheduled_for_help" className="gov-field-help">
+                  Select the date the assigned Agriculture Technician is expected to conduct the field inspection.
+                </p>
               </div>
               <div className="gov-form-actions">
                 <button
@@ -543,17 +577,20 @@ export default function InspectionsPage() {
               {formError}
             </p>
           )}
-          {notice && (
+          {notice && notice !== detailNotice && (
             <p role="status" className="gov-alert gov-alert-success mt-4">
               {workflowMessage(notice)}
             </p>
           )}
         </section>
+        )}
 
-        <section aria-label="Inspection records" className="gov-card gov-record-section">
+        <section aria-labelledby="inspection-records-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
             <div>
-              <h2 className="gov-record-title">Inspection records</h2>
+              <h2 id="inspection-records-heading" className="gov-record-title">
+                Inspection records
+              </h2>
               {!loading && listError === null && (
                 <p className="gov-record-meta">
                   {inspections.length} {inspections.length === 1 ? "record" : "records"} shown
@@ -590,12 +627,13 @@ export default function InspectionsPage() {
                 disabled={loading}
                 className="gov-button gov-button-secondary gov-button-compact"
               >
+                <Icon name="refresh" size={15} />
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
           {loading ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading inspections...
             </p>
           ) : listError ? (
@@ -615,13 +653,16 @@ export default function InspectionsPage() {
                     <th scope="col">Case / Farm / Farmer</th>
                     <th scope="col">Agriculture Technician</th>
                     <th scope="col">Scheduled</th>
-                    <th scope="col">Status</th>
+                    <th scope="col">Case status</th>
                     <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {inspections.map((entry) => (
-                    <tr key={entry.id}>
+                    <tr
+                      key={entry.id}
+                      className={selectedId === entry.id ? "gov-row-selected" : undefined}
+                    >
                       <td className="gov-cell-id">#{entry.id}</td>
                       <td>
                         <span className="gov-cell-primary">{entry.pest_case.pest_name}</span>
@@ -632,8 +673,11 @@ export default function InspectionsPage() {
                       </td>
                       <td>
                         {entry.assigned_to?.full_name ?? `#${entry.assigned_to_user_id}`}
+                        {entry.assigned_to_user_id === userId && (
+                          <span className="gov-cell-meta">Assigned to you</span>
+                        )}
                       </td>
-                      <td>{entry.scheduled_for}</td>
+                      <td className="gov-cell-nowrap">{formatDisplayDate(entry.scheduled_for)}</td>
                       <td>
                         <span
                           className={statusBadge(entry.pest_case.status)}
@@ -648,6 +692,7 @@ export default function InspectionsPage() {
                           className="gov-button gov-button-secondary gov-button-compact"
                         >
                           {selectedId === entry.id ? "Selected" : "View"}
+                          <span className="sr-only"> inspection #{entry.id}</span>
                         </button>
                       </td>
                     </tr>
@@ -660,11 +705,13 @@ export default function InspectionsPage() {
 
         {selectedId !== null && (
           <section
+            ref={detailRef}
+            tabIndex={-1}
             aria-label="Inspection detail"
-            className="gov-card gov-record-section"
+            className="gov-card gov-record-section gov-record-section--selected"
           >
             {loadingDetail ? (
-              <p role="status" className="gov-empty-state">
+              <p role="status" className="gov-loading-state">
                 Loading inspection details...
               </p>
             ) : detailError ? (
@@ -674,13 +721,23 @@ export default function InspectionsPage() {
             ) : detail ? (
               <div>
                 <div className="gov-record-toolbar">
-                  <h2 className="gov-record-title">
-                    Inspection #{detail.id} — {detail.pest_case.pest_name}
-                  </h2>
-                  <span
-                    className={statusBadge(detail.pest_case.status)}
-                  >
-                    {workflowLabel(detail.pest_case.status)}
+                  <div>
+                    <p className="gov-record-eyebrow">
+                      Inspection #{detail.id} · Case #{detail.pest_case_id}
+                    </p>
+                    <h2 className="gov-record-title">{detail.pest_case.pest_name}</h2>
+                  </div>
+                  <span className="gov-table-actions">
+                    <span className={statusBadge(detail.pest_case.status)}>
+                      {workflowLabel(detail.pest_case.status)}
+                    </span>
+                    <Link
+                      href={`/pest-cases/${detail.pest_case_id}`}
+                      className="gov-button gov-button-secondary gov-button-compact"
+                    >
+                      <Icon name="history" size={15} />
+                      Open case record
+                    </Link>
                   </span>
                 </div>
                 <dl className="gov-detail-grid">
@@ -699,24 +756,53 @@ export default function InspectionsPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="gov-detail-label">Reported area</dt>
-                    <dd className="gov-detail-value">
-                      {detail.pest_case.reported_area_hectares.toFixed(2)} ha (unchanged)
-                    </dd>
-                  </div>
-                  <div>
                     <dt className="gov-detail-label">Assigned Agriculture Technician</dt>
                     <dd className="gov-detail-value">
                       {detail.assigned_to?.full_name ?? `#${detail.assigned_to_user_id}`}
+                      {detail.assigned_to_user_id === userId && " (you)"}
                     </dd>
                   </div>
                   <div>
                     <dt className="gov-detail-label">Scheduled for</dt>
-                    <dd className="gov-detail-value">{detail.scheduled_for}</dd>
+                    <dd className="gov-detail-value">{formatDisplayDate(detail.scheduled_for)}</dd>
                   </div>
-                  <div>
-                    <dt className="gov-detail-label">Field result</dt>
-                    <dd className="gov-detail-value">
+                </dl>
+                <div className="gov-compare">
+                  <div className="gov-compare-panel gov-compare-panel--reported">
+                    <div className="gov-compare-head">
+                      <h3 className="gov-compare-title">
+                        <Icon name="file-text" size={17} />
+                        Initial report
+                      </h3>
+                      <span className="gov-tag">As reported</span>
+                    </div>
+                    <dl className="gov-detail-grid">
+                      <div>
+                        <dt className="gov-detail-label">Reported pest</dt>
+                        <dd className="gov-detail-value">{detail.pest_case.pest_name}</dd>
+                      </div>
+                      <div>
+                        <dt className="gov-detail-label">Reported area</dt>
+                        <dd className="gov-detail-value">
+                          {detail.pest_case.reported_area_hectares.toFixed(2)} ha (unchanged)
+                        </dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div
+                    className={`gov-compare-panel ${
+                      detail.pest_confirmed === null
+                        ? "gov-compare-panel--pending"
+                        : detail.pest_confirmed
+                          ? "gov-compare-panel--confirmed"
+                          : "gov-compare-panel--not-confirmed"
+                    }`}
+                  >
+                    <div className="gov-compare-head">
+                      <h3 className="gov-compare-title">
+                        <Icon name="inspection" size={17} />
+                        Field validation result
+                      </h3>
                       <span className={detail.pest_confirmed === null ? "gov-status-badge" : detail.pest_confirmed ? "gov-status-badge gov-status-field-validated" : "gov-status-badge gov-status-not-confirmed"}>
                       {detail.pest_confirmed === null
                         ? "Pending"
@@ -724,22 +810,45 @@ export default function InspectionsPage() {
                           ? `Confirmed — ${(detail.validated_area_hectares ?? 0).toFixed(2)} ha`
                           : "Not confirmed — 0.00 ha"}
                       </span>
-                    </dd>
-                  </div>
-                  {detail.findings !== null && (
-                    <div className="gov-detail-wide">
-                      <dt className="gov-detail-label">Findings</dt>
-                      <dd className="gov-detail-value">{detail.findings}</dd>
                     </div>
-                  )}
-                </dl>
+                    {detail.pest_confirmed === null ? (
+                      <p className="gov-compare-caption">
+                        Field findings have not been recorded yet. The reported information
+                        remains unverified until field validation is recorded.
+                      </p>
+                    ) : (
+                      <dl className="gov-detail-grid">
+                        <div>
+                          <dt className="gov-detail-label">Validated affected area</dt>
+                          <dd className="gov-detail-value">
+                            {(detail.validated_area_hectares ?? 0).toFixed(2)} ha
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="gov-detail-label">Inspected on</dt>
+                          <dd className="gov-detail-value">{formatDisplayDate(detail.inspected_on)}</dd>
+                        </div>
+                        {detail.findings !== null && (
+                          <div>
+                            <dt className="gov-detail-label">Findings</dt>
+                            <dd className="gov-detail-value">{detail.findings}</dd>
+                          </div>
+                        )}
+                      </dl>
+                    )}
+                  </div>
+                </div>
 
-                {isPending(detail) ? (
+                {isPending(detail) && role === "ADMIN" ? (
                   <div className="gov-form">
                     <div className="gov-workflow-panel">
                       <h3 className="gov-record-title">
                         Reschedule or reassign
                       </h3>
+                      <p className="gov-record-intro">
+                        Change the inspection date or the assigned Agriculture Technician while
+                        findings are pending. Leave a field blank to keep its current value.
+                      </p>
                       <form
                         onSubmit={(event) => void handleReschedule(event, detail)}
                         className="gov-form gov-form-grid"
@@ -749,21 +858,26 @@ export default function InspectionsPage() {
                             htmlFor="reschedule_date"
                             className="gov-label"
                           >
-                            New date (optional)
+                            New date <span className="gov-label-optional">(optional)</span>
                           </label>
                           <input
                             id="reschedule_date"
                             name="scheduled_for"
                             type="date"
+                            min={today}
+                            aria-describedby="reschedule_date_help"
                             className="gov-input"
                           />
+                          <p id="reschedule_date_help" className="gov-field-help">
+                            Select today or a future date for the expected field visit.
+                          </p>
                         </div>
                         <div className="gov-field">
                           <label
                             htmlFor="reassign_technician"
                             className="gov-label"
                           >
-                            New Agriculture Technician (optional)
+                            New Agriculture Technician <span className="gov-label-optional">(optional)</span>
                           </label>
                           <select
                             id="reassign_technician"
@@ -782,7 +896,7 @@ export default function InspectionsPage() {
                           <button
                             type="submit"
                             disabled={rescheduling || recording}
-                            className="gov-button gov-button-primary"
+                            className="gov-button gov-button-secondary"
                           >
                             {rescheduling ? "Saving..." : "Save schedule"}
                           </button>
@@ -791,19 +905,32 @@ export default function InspectionsPage() {
                     </div>
                     {canRecord(detail) ? (
                       <div className="gov-workflow-panel">
-                        <h3 className="gov-record-title">
-                          Record field findings
-                        </h3>
+                        <div className="gov-panel-heading">
+                          <span
+                            className="gov-panel-heading-icon gov-panel-heading-icon--validation"
+                            aria-hidden="true"
+                          >
+                            <Icon name="inspection" size={18} />
+                          </span>
+                          <div>
+                            <h3 className="gov-record-title">Record field validation</h3>
+                            <p className="gov-record-intro">
+                              Record what was verified on site. Validated findings are stored
+                              separately from the initial report, which stays unchanged.
+                            </p>
+                          </div>
+                        </div>
                         <form
                           onSubmit={(event) => void handleRecordFindings(event, detail)}
                           className="gov-form gov-form-grid"
                         >
+                          <RequiredLegend />
                           <div className="gov-field gov-field-wide">
                             <label
                               htmlFor="findings"
                               className="gov-label"
                             >
-                              Findings <span className="gov-required" aria-hidden="true">*</span>
+                              Field findings <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <textarea
                               id="findings"
@@ -820,7 +947,7 @@ export default function InspectionsPage() {
                               htmlFor="pest_confirmed"
                               className="gov-label"
                             >
-                              Pest damage confirmed? <span className="gov-required" aria-hidden="true">*</span>
+                              Pest damage confirmed on site? <span className="gov-required" aria-hidden="true">*</span>
                             </label>
                             <select
                               id="pest_confirmed"
@@ -851,9 +978,14 @@ export default function InspectionsPage() {
                               max={10000}
                               step={0.01}
                               required
-                              placeholder="e.g. 1.25 (0 when not confirmed)"
+                              placeholder="e.g. 1.25"
+                              aria-describedby="validated_area_help"
                               className="gov-input"
                             />
+                            <p id="validated_area_help" className="gov-field-help">
+                              Measured on site. Must be greater than 0 when damage is confirmed,
+                              and 0 when it is not confirmed.
+                            </p>
                           </div>
                           <div className="gov-field">
                             <label
@@ -882,21 +1014,34 @@ export default function InspectionsPage() {
                         </form>
                       </div>
                     ) : (
-                      <p role="status" className="gov-empty-state">
-                        Only an administrator or the assigned agriculture technician can record
-                        findings for this inspection.
+                      <p role="status" className="gov-callout">
+                        Only an Administrator or the assigned Agriculture Technician can record
+                        field findings for this inspection.
                       </p>
                     )}
                   </div>
                 ) : (
-                  <p role="status" className="gov-timeline-note">
+                  <p role="status" className="gov-callout mt-4">
                     Findings have been recorded and can no longer be edited in this
                     phase.
+                    {detail.pest_case.status === "FIELD_VALIDATED" && (
+                      <>
+                        {" "}
+                        <Link href="/interventions" className="gov-activity-link">
+                          Plan the intervention
+                        </Link>
+                      </>
+                    )}
                   </p>
                 )}
                 {actionError && (
                   <p role="alert" className="gov-alert gov-alert-error mt-4">
                     {actionError}
+                  </p>
+                )}
+                {detailNotice && (
+                  <p role="status" className="gov-alert gov-alert-success">
+                    {workflowMessage(detailNotice)}
                   </p>
                 )}
               </div>
