@@ -4,8 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { workflowLabel, workflowMessage } from "@/lib/presentation";
+import { formatDisplayDate, workflowLabel, workflowMessage } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import { Icon } from "@/components/icons";
+import {
+  PageHeader,
+  RequiredLegend,
+  SessionNotice,
+  useRevealOnChange,
+} from "@/components/ui";
+import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   FollowUpsRequestError,
   dueBadgeLabel,
@@ -97,6 +105,10 @@ export default function FollowUpsPage() {
   const authenticated = auth.status === "authenticated";
   const role = auth.status === "authenticated" ? auth.user.role : null;
   const userId = auth.status === "authenticated" ? auth.user.id : null;
+  const recordRef = useRevealOnChange<HTMLElement>(selectedInterventionId);
+  const detailRef = useRevealOnChange<HTMLElement>(
+    loadingDetail ? null : selectedFollowUpId,
+  );
 
   const canRecord = useCallback(
     (entry: FollowUpDueEntry): boolean => {
@@ -318,31 +330,8 @@ export default function FollowUpsPage() {
     form.reset();
   }
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
   const selectedEntry = due.find(
@@ -353,49 +342,41 @@ export default function FollowUpsPage() {
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Follow-up &amp; Reassessment</h1>
-        <p className="gov-page-description">
-          Record human reassessments for completed interventions. Outcomes are
-          explicitly selected and never inferred. Resolved cases close; cases
-          needing more work return for reintervention. History is preserved.
-        </p>
-        <div className="gov-page-links">
-          <Link
-            href="/pest-cases"
-            className="gov-activity-link"
-          >
-            View pest cases
-          </Link>
-          <Link
-            href="/interventions"
-            className="gov-activity-link"
-          >
-            View interventions
-          </Link>
-          <Link
-            href="/reports"
-            className="gov-activity-link"
-          >
-            View reports
-          </Link>
-        </div>
-      </header>
+      <PageHeader
+        title="Follow-up & Reassessment"
+        description="Record human reassessments for completed interventions. Outcomes are explicitly selected and never inferred. Resolved cases close; cases needing more work return for reintervention. History is preserved."
+        related={[
+          { href: "/pest-cases", label: "Pest Cases" },
+          { href: "/interventions", label: "Interventions" },
+          { href: "/reports", label: "Reports" },
+        ]}
+      />
+      <WorkflowSteps current="follow-up" />
 
-        <section aria-label="Pending follow-up queue" className="gov-card gov-record-section">
+        <section aria-labelledby="queue-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
-            <h2 className="gov-record-title">Pending follow-up queue</h2>
+            <div>
+              <h2 id="queue-heading" className="gov-record-title">
+                Pending follow-up queue
+              </h2>
+              <p className="gov-record-meta">
+                {loading || listError !== null
+                  ? "Completed interventions awaiting reassessment."
+                  : `${due.length} ${due.length === 1 ? "intervention" : "interventions"} awaiting reassessment. Due dates follow the Asia/Manila calendar.`}
+              </p>
+            </div>
             <button
               type="button"
               onClick={() => void loadAll(outcomeFilter, caseFilter)}
               disabled={loading}
               className="gov-button gov-button-secondary gov-button-compact"
             >
+              <Icon name="refresh" size={15} />
               {loading ? "Refreshing..." : "Refresh"}
             </button>
           </div>
           {loading ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading follow-up queue...
             </p>
           ) : listError ? (
@@ -422,9 +403,19 @@ export default function FollowUpsPage() {
                   {due.map((entry) => {
                     const localState = dueStateFor(entry.follow_up_due_on);
                     return (
-                      <tr key={entry.intervention_id}>
+                      <tr
+                        key={entry.intervention_id}
+                        className={
+                          selectedInterventionId === entry.intervention_id
+                            ? "gov-row-selected"
+                            : undefined
+                        }
+                      >
                         <td>
-                          #{entry.pest_case_id} — {entry.pest_case?.pest_name ?? "—"}
+                          <span className="gov-cell-primary">
+                            {entry.pest_case?.pest_name ?? "—"}
+                          </span>
+                          <span className="gov-cell-meta">Case #{entry.pest_case_id}</span>
                           <span className="gov-cell-meta">
                             {entry.pest_case?.farm?.plot_identifier ?? "—"} —{" "}
                             {entry.pest_case?.farm?.farmer?.full_name ?? "—"}
@@ -432,20 +423,23 @@ export default function FollowUpsPage() {
                         </td>
                         <td>
                           {entry.assigned_to?.full_name ?? `#${entry.assigned_to_user_id}`}
+                          {entry.assigned_to_user_id === userId && (
+                            <span className="gov-cell-meta">Assigned to you</span>
+                          )}
                         </td>
                         <td>
                           {entry.method_category}
                           <span className="gov-cell-meta">
-                            Performed {entry.performed_on ?? "—"}
+                            Performed {formatDisplayDate(entry.performed_on)}
                           </span>
                         </td>
                         <td>
-                          <span
-                            className={dueBadge(localState)}
-                          >
-                            {entry.follow_up_due_on ?? "Not set"} —{" "}
-                            {dueBadgeLabel(localState)}
-                          </span>
+                          <span className={dueBadge(localState)}>{dueBadgeLabel(localState)}</span>
+                          {entry.follow_up_due_on !== null && (
+                            <span className="gov-cell-meta">
+                              {formatDisplayDate(entry.follow_up_due_on)}
+                            </span>
+                          )}
                         </td>
                         <td className="gov-col-actions">
                           {canRecord(entry) ? (
@@ -463,6 +457,9 @@ export default function FollowUpsPage() {
                               {selectedInterventionId === entry.intervention_id
                                 ? "Selected"
                                 : "Record"}
+                              <span className="sr-only">
+                                {" "}follow-up for case #{entry.pest_case_id}
+                              </span>
                             </button>
                           ) : (
                             <span className="gov-cell-meta">
@@ -479,18 +476,54 @@ export default function FollowUpsPage() {
           )}
         </section>
 
-        <section aria-label="Record follow-up" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Record follow-up</h2>
+        <section
+          ref={recordRef}
+          tabIndex={-1}
+          aria-labelledby="record-follow-up-heading"
+          className={`gov-card gov-record-section${activeRecordingTarget ? " gov-record-section--selected" : ""}`}
+        >
+          <p className="gov-record-eyebrow">Reassessment</p>
+          <h2 id="record-follow-up-heading" className="gov-record-title">
+            Record follow-up
+          </h2>
           {activeRecordingTarget === null ? (
             <p role="status" className="gov-empty-state">
               Select a pending intervention from the queue to record its reassessment.
             </p>
           ) : (
             <form onSubmit={handleRecord} className="gov-form gov-form-grid">
-              <p className="gov-field-help gov-field-wide">
-                Recording for intervention #{activeRecordingTarget.intervention_id}. The outcome you
-                select controls the next case status.
+              <dl className="gov-detail-grid gov-detail-grid--3 gov-field-wide">
+                <div>
+                  <dt className="gov-detail-label">Case</dt>
+                  <dd className="gov-detail-value">
+                    #{activeRecordingTarget.pest_case_id} —{" "}
+                    {activeRecordingTarget.pest_case?.pest_name ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="gov-detail-label">Farm / farmer</dt>
+                  <dd className="gov-detail-value">
+                    {activeRecordingTarget.pest_case?.farm?.plot_identifier ?? "—"} —{" "}
+                    {activeRecordingTarget.pest_case?.farm?.farmer?.full_name ?? "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="gov-detail-label">Intervention</dt>
+                  <dd className="gov-detail-value">
+                    #{activeRecordingTarget.intervention_id} · {activeRecordingTarget.method_category}
+                    <span className="gov-cell-meta">
+                      Performed {formatDisplayDate(activeRecordingTarget.performed_on)} · Follow-up due{" "}
+                      {formatDisplayDate(activeRecordingTarget.follow_up_due_on)}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+              <p className="gov-callout gov-field-wide">
+                The outcome you select controls the next case status: <strong>Resolved</strong>{" "}
+                closes the case, and <strong>Further intervention required</strong> returns it
+                for another intervention cycle.
               </p>
+              <RequiredLegend />
               <div className="gov-field">
                 <label htmlFor="observed_on" className="gov-label">
                   Observed date <span className="gov-required" aria-hidden="true">*</span>
@@ -500,6 +533,7 @@ export default function FollowUpsPage() {
                   name="observed_on"
                   type="date"
                   required
+                  max={manilaTodayIso()}
                   className="gov-input"
                 />
               </div>
@@ -533,16 +567,30 @@ export default function FollowUpsPage() {
                   className="gov-input"
                 />
               </div>
-              <fieldset className="gov-radio-group">
-                <legend className="gov-label">Outcome (required) <span className="gov-required" aria-hidden="true">*</span></legend>
-                <div className="gov-choice-group gov-choice-group--stack">
-                  <label className="gov-choice">
+              <fieldset className="gov-radio-group gov-field-wide">
+                <legend className="gov-label">Outcome <span className="gov-required" aria-hidden="true">*</span></legend>
+                <div className="gov-choice-group gov-choice-group--cards">
+                  <label className="gov-choice gov-choice-card gov-choice--resolve">
                     <input type="radio" name="outcome" value="RESOLVED" required />
-                    Resolved / No further intervention required
+                    <span className="gov-choice-body">
+                      <span className="gov-choice-title">
+                        <Icon name="check-circle" size={16} />
+                        Resolved / No further intervention required
+                      </span>
+                      <span className="gov-choice-detail">The case will be closed.</span>
+                    </span>
                   </label>
-                  <label className="gov-choice">
+                  <label className="gov-choice gov-choice-card gov-choice--reintervene">
                     <input type="radio" name="outcome" value="REINTERVENTION_REQUIRED" required />
-                    Further intervention required
+                    <span className="gov-choice-body">
+                      <span className="gov-choice-title">
+                        <Icon name="alert-triangle" size={16} />
+                        Further intervention required
+                      </span>
+                      <span className="gov-choice-detail">
+                        The case returns for another intervention cycle.
+                      </span>
+                    </span>
                   </label>
                 </div>
               </fieldset>
@@ -583,9 +631,14 @@ export default function FollowUpsPage() {
           )}
         </section>
 
-        <section aria-label="Follow-up history" className="gov-card gov-record-section">
+        <section aria-labelledby="history-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
-            <h2 className="gov-record-title">Follow-up history</h2>
+            <div>
+              <h2 id="history-heading" className="gov-record-title">
+                Follow-up history
+              </h2>
+              <p className="gov-record-meta">Recorded reassessments are read-only.</p>
+            </div>
             <div className="gov-record-controls">
               <label htmlFor="follow_case_filter" className="gov-label">
                 Case
@@ -624,12 +677,13 @@ export default function FollowUpsPage() {
                 disabled={loading}
                 className="gov-button gov-button-secondary gov-button-compact"
               >
+                <Icon name="refresh" size={15} />
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
           {loading ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading follow-up history...
             </p>
           ) : history.length === 0 ? (
@@ -649,20 +703,25 @@ export default function FollowUpsPage() {
                 </thead>
                 <tbody>
                   {history.map((entry) => (
-                    <tr key={entry.id}>
+                    <tr
+                      key={entry.id}
+                      className={selectedFollowUpId === entry.id ? "gov-row-selected" : undefined}
+                    >
                       <td>
                         #{entry.id} — {cycleLabel(history, entry)}
                         <span className="gov-cell-meta">
                           Recorded {formatRecordDate(entry.created_at ?? null)} by{" "}
                           {entry.recorded_by?.full_name ?? `#${entry.recorded_by_user_id}`}
                         </span>
-                        <span className="gov-cell-meta">
+                        <span className="gov-cell-note">
                           {entry.assessment_notes}
                         </span>
                       </td>
                       <td>
-                        {entry.pest_observed ? "Pest seen" : "No pest seen"} —{" "}
-                        {entry.observed_on}
+                        {entry.pest_observed ? "Pest seen" : "No pest seen"}
+                        <span className="gov-cell-meta">
+                          Observed {formatDisplayDate(entry.observed_on)}
+                        </span>
                         <span className="gov-cell-meta">
                           Area{" "}
                           {entry.observed_affected_area_hectares === null
@@ -693,6 +752,7 @@ export default function FollowUpsPage() {
                           className="gov-button gov-button-secondary gov-button-compact"
                         >
                           {selectedFollowUpId === entry.id ? "Selected" : "View"}
+                          <span className="sr-only"> follow-up #{entry.id}</span>
                         </button>
                       </td>
                     </tr>
@@ -705,11 +765,13 @@ export default function FollowUpsPage() {
 
         {selectedFollowUpId !== null && (
           <section
+            ref={detailRef}
+            tabIndex={-1}
             aria-label="Follow-up detail"
-            className="gov-card gov-record-section"
+            className="gov-card gov-record-section gov-record-section--selected"
           >
             {loadingDetail ? (
-              <p role="status" className="gov-empty-state">
+              <p role="status" className="gov-loading-state">
                 Loading follow-up details...
               </p>
             ) : detailError ? (
@@ -719,13 +781,29 @@ export default function FollowUpsPage() {
             ) : detail ? (
               <div>
                 <div className="gov-record-toolbar">
-                  <h2 className="gov-record-title">
-                    Follow-up #{detail.id} — {detail.pest_case?.pest_name ?? "—"}
-                  </h2>
-                  <span
-                    className={outcomeBadge(detail.outcome)}
-                  >
-                    {workflowLabel(detail.outcome)}
+                  <div>
+                    <p className="gov-record-eyebrow">
+                      Follow-up #{detail.id}
+                      {detail.pest_case ? ` · Case #${detail.pest_case.id}` : ""}
+                    </p>
+                    <h2 className="gov-record-title">{detail.pest_case?.pest_name ?? "—"}</h2>
+                  </div>
+                  <span className="gov-table-actions">
+                    <span className="gov-badge-group">
+                      <span className="gov-badge-pair-label">Outcome</span>
+                      <span className={outcomeBadge(detail.outcome)}>
+                        {workflowLabel(detail.outcome)}
+                      </span>
+                    </span>
+                    {detail.pest_case && (
+                      <Link
+                        href={`/pest-cases/${detail.pest_case.id}`}
+                        className="gov-button gov-button-secondary gov-button-compact"
+                      >
+                        <Icon name="history" size={15} />
+                        Open case record
+                      </Link>
+                    )}
                   </span>
                 </div>
                 <dl className="gov-detail-grid">
@@ -735,13 +813,17 @@ export default function FollowUpsPage() {
                   </div>
                   <div>
                     <dt className="gov-detail-label">Case status</dt>
-                    <dd className="gov-detail-value">{workflowLabel(detail.pest_case?.status ?? "—")}</dd>
+                    <dd className="gov-detail-value">
+                      <span className={caseBadge(detail.pest_case?.status ?? "")}>
+                        {workflowLabel(detail.pest_case?.status ?? "—")}
+                      </span>
+                    </dd>
                   </div>
                   <div>
                     <dt className="gov-detail-label">Observation</dt>
                     <dd className="gov-detail-value">
                       {detail.pest_observed ? "Pest observed" : "No pest observed"} on{" "}
-                      {detail.observed_on}
+                      {formatDisplayDate(detail.observed_on)}
                     </dd>
                   </div>
                   <div>
@@ -756,7 +838,7 @@ export default function FollowUpsPage() {
                     <dd className="gov-detail-value">{detail.assessment_notes}</dd>
                   </div>
                 </dl>
-                <p role="status" className="gov-timeline-note">
+                <p role="status" className="gov-callout mt-4">
                   Recorded reassessments are read-only history and cannot be edited or
                   deleted in this phase.
                 </p>

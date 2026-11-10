@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 
 import { workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import { Icon } from "@/components/icons";
+import { PageHeader, Seal, SessionNotice } from "@/components/ui";
+import { OFFICE_NAME, SYSTEM_NAME } from "@/lib/branding";
 import {
   ReportsRequestError,
   getOperationalReport,
@@ -32,6 +35,24 @@ function formatRecordDate(value: string | null): string {
     ...(dateOnly ? {} : { timeStyle: "short" as const }),
     timeZone: dateOnly ? "UTC" : "Asia/Manila",
   }).format(parsed);
+}
+
+// Presentation order only: lists status counts in workflow sequence.
+const STATUS_ORDER = [
+  "REPORTED",
+  "FOR_INSPECTION",
+  "INSPECTION_SCHEDULED",
+  "FIELD_VALIDATED",
+  "NOT_CONFIRMED",
+  "UNDER_INTERVENTION",
+  "FOLLOW_UP_DUE",
+  "REINTERVENTION_REQUIRED",
+  "CLOSED",
+];
+
+function statusOrder(status: string): number {
+  const index = STATUS_ORDER.indexOf(status);
+  return index === -1 ? STATUS_ORDER.length : index;
 }
 
 export default function ReportsPage() {
@@ -147,40 +168,48 @@ export default function ReportsPage() {
     };
   }, [authenticated, router]);
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Operational Reports</h1>
-        <p className="gov-page-description">Factual workflow counts and case rows. No treatment-effectiveness scoring.</p>
-        <Link href="/pest-cases" className="gov-activity-link">View pest cases</Link>
-      </header>
+      <div className="gov-print-only gov-print-header">
+        <Seal size={48} />
+        <div>
+          <p>
+            <strong>{OFFICE_NAME}</strong>
+          </p>
+          <p>{SYSTEM_NAME}: Operational Report</p>
+          <p>
+            Printed{" "}
+            {new Intl.DateTimeFormat("en-PH", {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: "Asia/Manila",
+            }).format(new Date())}
+          </p>
+        </div>
+      </div>
+      <PageHeader
+        title="Operational Reports"
+        description="Factual workflow counts and case rows. No treatment-effectiveness scoring."
+        related={[
+          { href: "/pest-cases", label: "Pest Cases" },
+          { href: "/follow-ups", label: "Follow-ups" },
+        ]}
+        actions={
+          <button
+            type="button"
+            onClick={() => window.print()}
+            disabled={loading || report === null}
+            className="gov-button gov-button-secondary"
+          >
+            <Icon name="printer" size={16} />
+            Print report
+          </button>
+        }
+      />
 
         <form
           aria-label="Report filters"
@@ -196,7 +225,13 @@ export default function ReportsPage() {
           }}
           className="gov-card gov-record-section gov-form gov-report-filters"
         >
-          <h2 className="gov-record-title gov-field-wide">Filter report</h2>
+          <div className="gov-field-wide">
+            <h2 className="gov-record-title">Filter report</h2>
+            <p className="gov-record-intro">
+              Narrow the report by case status, farmer, farm, or reported date. Farmer and farm
+              IDs are listed on the Farmers and Farms pages.
+            </p>
+          </div>
           <div className="gov-field">
             <label htmlFor="report_status" className="gov-label">
               Status
@@ -293,7 +328,7 @@ export default function ReportsPage() {
                 void loadReport({ status: "all", farmerId: "all", farmId: "all", from: "", to: "" });
               }}
               disabled={loading}
-              className="gov-button gov-button-secondary gov-button-compact"
+              className="gov-button gov-button-secondary"
             >
               Clear filters
             </button>
@@ -306,7 +341,7 @@ export default function ReportsPage() {
         )}
 
         {loading ? (
-          <p role="status" className="gov-empty-state">
+          <p role="status" className="gov-loading-state">
             Loading operational report...
           </p>
         ) : listError ? (
@@ -315,8 +350,11 @@ export default function ReportsPage() {
           </p>
         ) : report ? (
           <div>
-            <section aria-label="Report summary" className="gov-card gov-record-section">
-              <h2 className="gov-record-title">Summary</h2>
+            <section aria-labelledby="report-summary-heading" className="gov-card gov-record-section">
+              <h2 id="report-summary-heading" className="gov-record-title">
+                Summary
+              </h2>
+              <p className="gov-record-meta">Counts for the current filters.</p>
               <div className="gov-summary-grid gov-report-summary">
                 <div className="gov-stat">
                   <p className="gov-stat-label">Total cases</p>
@@ -349,9 +387,9 @@ export default function ReportsPage() {
             <section aria-label="Cases by status" className="gov-card gov-record-section">
               <h2 className="gov-record-title">Cases by status</h2>
               <dl className="gov-report-list">
-                {(
-                  Object.entries(report.by_status) as [string, number][]
-                ).map(([status, count]) => (
+                {(Object.entries(report.by_status) as [string, number][])
+                  .sort(([left], [right]) => statusOrder(left) - statusOrder(right))
+                  .map(([status, count]) => (
                   <div key={status} className="gov-report-row">
                     <dt><span className={`gov-status-badge gov-status-${status.toLowerCase().replaceAll("_", "-")}`}>{workflowLabel(status)}</span></dt>
                     <dd className="gov-report-count">{count}</dd>
@@ -416,8 +454,14 @@ export default function ReportsPage() {
               </div>
           </div>
 
-            <section aria-label="Report cases" className="gov-card gov-record-section">
-              <h2 className="gov-record-title">Report cases</h2>
+            <section aria-labelledby="report-cases-heading" className="gov-card gov-record-section">
+              <h2 id="report-cases-heading" className="gov-record-title">
+                Report cases
+              </h2>
+              <p className="gov-record-meta">
+                {report.cases.length} {report.cases.length === 1 ? "case" : "cases"} match the
+                current filters.
+              </p>
               {report.cases.length === 0 ? (
                 <p role="status" className="gov-empty-state">
                   No cases match the current filters.
@@ -427,17 +471,21 @@ export default function ReportsPage() {
                   <table className="gov-table min-w-[860px]">
                     <thead>
                       <tr>
-                        <th scope="col">Case</th>
+                        <th scope="col" className="gov-col-wide">Case</th>
                         <th scope="col">Farmer / Farm</th>
                         <th scope="col">Status</th>
                         <th scope="col">Cycle / Follow-up</th>
+                        <th scope="col" className="gov-col-actions gov-no-print">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {report.cases.map((entry) => (
                         <tr key={entry.case_id}>
                           <td>
-                            #{entry.case_id} — {entry.pest_name}
+                            <span className="gov-cell-primary">{entry.pest_name}</span>
+                            <span className="gov-cell-meta">Case #{entry.case_id}</span>
                             <span className="gov-cell-meta">
                               Reported {formatRecordDate(entry.reported_at)} ·{" "}
                               {entry.reported_area_hectares.toFixed(2)} ha
@@ -457,6 +505,15 @@ export default function ReportsPage() {
                             <span className="gov-cell-meta">
                               {workflowLabel(entry.latest_follow_up_outcome ?? "No recorded follow-up")}
                             </span>
+                          </td>
+                          <td className="gov-col-actions gov-no-print">
+                            <Link
+                              href={`/pest-cases/${entry.case_id}`}
+                              className="gov-button gov-button-secondary gov-button-compact"
+                            >
+                              <Icon name="history" size={15} />
+                              Case record<span className="sr-only"> for case #{entry.case_id}</span>
+                            </Link>
                           </td>
                         </tr>
                       ))}

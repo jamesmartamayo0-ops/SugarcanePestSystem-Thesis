@@ -4,6 +4,13 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
+import { Icon } from "@/components/icons";
+import {
+  PageHeader,
+  RequiredLegend,
+  SessionNotice,
+  useRevealOnChange,
+} from "@/components/ui";
 import {
   FarmersRequestError,
   createFarmer,
@@ -24,8 +31,10 @@ export default function FarmersPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const authenticated = auth.status === "authenticated";
+  const editRef = useRevealOnChange<HTMLElement>(editingId);
 
   useEffect(() => {
     if (auth.status === "unauthenticated") {
@@ -213,45 +222,41 @@ export default function FarmersPage() {
     }
   }
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
-  }
+  // Quick search over the already-loaded (and already authorized) list.
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleFarmers =
+    normalizedQuery === ""
+      ? farmers
+      : farmers.filter((entry) =>
+          [entry.full_name, entry.barangay, entry.contact_number ?? "", String(entry.id)].some(
+            (value) => value.toLowerCase().includes(normalizedQuery),
+          ),
+        );
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Farmers</h1>
-        <p className="gov-page-description">
-          Manage farmer records used in sugarcane pest case reporting.
-        </p>
-      </header>
+      <PageHeader
+        title="Farmers"
+        description="Manage farmer records used in sugarcane pest case reporting."
+        related={[
+          { href: "/farms", label: "Farms" },
+          { href: "/pest-cases", label: "Pest Cases" },
+        ]}
+      />
 
-        <section aria-label="Add farmer" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Add farmer</h2>
+        <section aria-labelledby="add-farmer-heading" className="gov-card gov-record-section">
+          <h2 id="add-farmer-heading" className="gov-record-title">
+            Add farmer
+          </h2>
+          <p className="gov-record-intro">
+            Register a farmer before recording their farms and pest cases.
+          </p>
           <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+            <RequiredLegend />
             <div className="gov-field">
               <label htmlFor="full_name" className="gov-label">
                 Full name <span className="gov-required" aria-hidden="true">*</span>
@@ -282,7 +287,7 @@ export default function FarmersPage() {
             </div>
             <div className="gov-field">
               <label htmlFor="contact_number" className="gov-label">
-                Contact number (optional)
+                Contact number <span className="gov-label-optional">(optional)</span>
               </label>
               <input
                 id="contact_number"
@@ -300,6 +305,7 @@ export default function FarmersPage() {
                 disabled={creating}
                 className="gov-button gov-button-primary"
               >
+                <Icon name="plus" size={16} />
                 {creating ? "Adding..." : "Add farmer"}
               </button>
             </div>
@@ -309,32 +315,59 @@ export default function FarmersPage() {
               {formError}
             </p>
           )}
-          {formNotice && (
+          {formNotice && formNotice.endsWith(" was added.") && (
             <p role="status" className="gov-alert gov-alert-success mt-4">
               {formNotice}
             </p>
           )}
         </section>
 
-        <section aria-label="Farmer records" className="gov-card gov-record-section">
+        <section aria-labelledby="farmer-records-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
             <div>
-              <h2 className="gov-record-title">Farmer records</h2>
+              <h2 id="farmer-records-heading" className="gov-record-title">
+                Farmer records
+              </h2>
               {!loadingList && listError === null && (
-                <p className="gov-record-meta">{farmers.length} registered</p>
+                <p className="gov-record-meta">
+                  {normalizedQuery === ""
+                    ? `${farmers.length} registered`
+                    : `${visibleFarmers.length} of ${farmers.length} shown`}
+                </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => void refresh()}
-              disabled={loadingList}
-              className="gov-button gov-button-secondary gov-button-compact"
-            >
-              {loadingList ? "Refreshing..." : "Refresh"}
-            </button>
+            <div className="gov-record-controls">
+              <label htmlFor="farmer_search" className="gov-label">
+                Search
+              </label>
+              <input
+                id="farmer_search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                maxLength={120}
+                autoComplete="off"
+                placeholder="Name, barangay, contact, or ID"
+                className="gov-input gov-input-search gov-list-search"
+              />
+              <button
+                type="button"
+                onClick={() => void refresh()}
+                disabled={loadingList}
+                className="gov-button gov-button-secondary gov-button-compact"
+              >
+                <Icon name="refresh" size={15} />
+                {loadingList ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
           </div>
+          {formNotice && formNotice.endsWith(" was updated.") && (
+            <p role="status" className="gov-alert gov-alert-success">
+              {formNotice}
+            </p>
+          )}
           {loadingList ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading farmers...
             </p>
           ) : listError ? (
@@ -344,6 +377,17 @@ export default function FarmersPage() {
           ) : farmers.length === 0 ? (
             <p role="status" className="gov-empty-state">
               No farmer records available. Add the first farmer above.
+            </p>
+          ) : visibleFarmers.length === 0 ? (
+            <p role="status" className="gov-empty-state">
+              No farmers match “{query.trim()}”.{" "}
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="gov-button gov-button-ghost gov-button-compact"
+              >
+                Clear search
+              </button>
             </p>
           ) : (
             <div className="gov-table-wrap mt-4">
@@ -358,9 +402,15 @@ export default function FarmersPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {farmers.map((entry) => (
-                    <tr key={entry.id}>
-                      <td className="gov-cell-primary">{entry.full_name}</td>
+                  {visibleFarmers.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      className={editingId === entry.id ? "gov-row-selected" : undefined}
+                    >
+                      <td>
+                        <span className="gov-cell-primary">{entry.full_name}</span>
+                        <span className="gov-cell-meta">Farmer ID {entry.id}</span>
+                      </td>
                       <td>{entry.barangay}</td>
                       <td>{entry.contact_number ?? "—"}</td>
                       <td className="gov-cell-num">{entry.farm_count}</td>
@@ -374,6 +424,7 @@ export default function FarmersPage() {
                           className="gov-button gov-button-secondary gov-button-compact"
                         >
                           {editingId === entry.id ? "Cancel" : "Edit"}
+                          <span className="sr-only"> {entry.full_name}</span>
                         </button>
                       </td>
                     </tr>
@@ -391,14 +442,21 @@ export default function FarmersPage() {
               return null;
             }
             return (
-              <section aria-label="Edit farmer" className="gov-card gov-record-section">
-                <h2 className="gov-record-title">
-                  Edit farmer: {target.full_name}
+              <section
+                ref={editRef}
+                tabIndex={-1}
+                aria-labelledby="edit-farmer-heading"
+                className="gov-card gov-record-section gov-record-section--selected"
+              >
+                <p className="gov-record-eyebrow">Edit farmer · Farmer ID {target.id}</p>
+                <h2 id="edit-farmer-heading" className="gov-record-title">
+                  {target.full_name}
                 </h2>
                 <form
                   onSubmit={(event) => void handleEdit(event, target)}
                   className="gov-form gov-form-grid"
                 >
+                  <RequiredLegend />
                   <div className="gov-field">
                     <label htmlFor="edit_full_name" className="gov-label">
                       Full name <span className="gov-required" aria-hidden="true">*</span>
@@ -431,7 +489,7 @@ export default function FarmersPage() {
                   </div>
                   <div className="gov-field">
                     <label htmlFor="edit_contact_number" className="gov-label">
-                      Contact number (optional)
+                      Contact number <span className="gov-label-optional">(optional)</span>
                     </label>
                     <input
                       id="edit_contact_number"
@@ -444,6 +502,17 @@ export default function FarmersPage() {
                     />
                   </div>
                   <div className="gov-form-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditError(null);
+                      }}
+                      disabled={savingEdit}
+                      className="gov-button gov-button-secondary"
+                    >
+                      Cancel
+                    </button>
                     <button
                       type="submit"
                       disabled={savingEdit}

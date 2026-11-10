@@ -4,8 +4,16 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
-import { workflowLabel } from "@/lib/presentation";
+import { formatDisplayDate, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import { Icon } from "@/components/icons";
+import {
+  PageHeader,
+  RequiredLegend,
+  SessionNotice,
+  useRevealOnChange,
+} from "@/components/ui";
+import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   INTERVENTION_METHOD_CATEGORIES,
   InterventionsRequestError,
@@ -44,19 +52,20 @@ function todayIso(now: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-function followUpLabel(followUp: string | null, completed: boolean): string {
+function followUpState(followUp: string | null, completed: boolean): string {
   if (followUp === null) {
     return "Not set";
   }
   const today = todayIso();
   if (followUp < today) {
-    return `${followUp} — Overdue`;
+    return "Overdue";
   }
   if (followUp === today) {
-    return `${followUp} — Due today`;
+    return "Due today";
   }
-  return completed ? `${followUp} — Upcoming` : `${followUp} — Planned`;
+  return completed ? "Upcoming" : "Planned";
 }
+
 
 function followUpBadge(followUp: string | null): string {
   if (followUp === null) {
@@ -82,6 +91,29 @@ function cycleFor(all: InterventionDetail[], item: InterventionDetail): number {
     .sort((left, right) => left.id - right.id);
   const position = sameCase.findIndex((entry) => entry.id === item.id);
   return position < 0 ? 1 : position + 1;
+}
+
+// Presentation only. A completed intervention's follow-up is still pending
+// only while its case awaits follow-up and no later cycle exists: a Resolved
+// follow-up closes the case, and a new cycle starts only after a follow-up.
+function followUpPending(all: InterventionDetail[], item: InterventionDetail): boolean {
+  if (item.pest_case.status !== "FOLLOW_UP_DUE") {
+    return false;
+  }
+  return !all.some((entry) => entry.pest_case_id === item.pest_case_id && entry.id > item.id);
+}
+
+type FollowUpDisplay = { label: string; badge: string };
+
+function followUpDisplay(all: InterventionDetail[], item: InterventionDetail): FollowUpDisplay {
+  const completed = !isPending(item);
+  if (completed && item.follow_up_due_on !== null && !followUpPending(all, item)) {
+    return { label: "Follow-up recorded", badge: "gov-status-badge gov-tone-success" };
+  }
+  return {
+    label: followUpState(item.follow_up_due_on, completed),
+    badge: followUpBadge(item.follow_up_due_on),
+  };
 }
 
 function isPending(item: InterventionDetail): boolean {
@@ -117,6 +149,7 @@ export default function InterventionsPage() {
   const authenticated = auth.status === "authenticated";
   const role = auth.status === "authenticated" ? auth.user.role : null;
   const userId = auth.status === "authenticated" ? auth.user.id : null;
+  const detailRef = useRevealOnChange<HTMLElement>(loadingDetail ? null : selectedId);
 
   useEffect(() => {
     if (auth.status === "unauthenticated") {
@@ -476,31 +509,8 @@ export default function InterventionsPage() {
     }
   }
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
   const canAct = (item: InterventionDetail): boolean => {
@@ -513,47 +523,36 @@ export default function InterventionsPage() {
     return role === "TECHNICIAN" && item.assigned_to_user_id === userId;
   };
 
+  // Confirmations about the open intervention are shown beside it, not in the form above.
+  const detailNotice =
+    notice !== null && detail !== null && notice.includes(`#${detail.id} `) ? notice : null;
+  const detailFollowUp = detail !== null ? followUpDisplay(interventions, detail) : null;
+
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Interventions</h1>
-        <p className="gov-page-description">
-          Plan human-selected field actions for Field Validated and
-          Reintervention Required cases, then record completion with a follow-up
-          due date. Historical interventions are preserved so first and repeat
-          cycles stay distinguishable. Categories are documentation labels only
-          and never prescribe chemicals, rates, or dosages.
-        </p>
-        <div className="gov-page-links">
-          <Link
-            href="/pest-cases"
-            className="gov-activity-link"
-          >
-            View pest cases
-          </Link>
-          <Link
-            href="/inspections"
-            className="gov-activity-link"
-          >
-            View inspections
-          </Link>
-          <Link
-            href="/follow-ups"
-            className="gov-activity-link"
-          >
-            View follow-ups
-          </Link>
-          <Link
-            href="/reports"
-            className="gov-activity-link"
-          >
-            View reports
-          </Link>
-        </div>
-      </header>
+      <PageHeader
+        title="Interventions"
+        description="Plan human-selected field actions for Field Validated and Reintervention Required cases, then record completion with a follow-up due date. Historical interventions are preserved so first and repeat cycles stay distinguishable."
+        related={[
+          { href: "/pest-cases", label: "Pest Cases" },
+          { href: "/inspections", label: "Inspections" },
+          { href: "/follow-ups", label: "Follow-ups" },
+          { href: "/reports", label: "Reports" },
+        ]}
+      />
+      <WorkflowSteps current="intervention" />
 
-        <section aria-label="Start intervention" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Start intervention</h2>
+        <section aria-labelledby="start-intervention-heading" className="gov-card gov-record-section">
+          <p className="gov-record-eyebrow">Intervention plan</p>
+          <h2 id="start-intervention-heading" className="gov-record-title">
+            Start intervention
+          </h2>
+          <p className="gov-callout">
+            <strong>Decided by authorized personnel.</strong> The responsible agricultural
+            staff choose and describe the field action. Categories are documentation labels
+            only; the system never recommends treatments or prescribes chemicals, rates, or
+            dosages.
+          </p>
           {eligibleCases.length === 0 && !loading ? (
             <p role="status" className="gov-empty-state">
               No Field Validated or Reintervention Required cases are waiting for an
@@ -561,6 +560,7 @@ export default function InterventionsPage() {
             </p>
           ) : (
             <form onSubmit={handleStart} className="gov-form gov-form-grid">
+              <RequiredLegend />
               <div className="gov-field">
                 <label htmlFor="pest_case_id" className="gov-label">
                   Eligible case <span className="gov-required" aria-hidden="true">*</span>
@@ -585,13 +585,14 @@ export default function InterventionsPage() {
               </div>
               <div className="gov-field">
                 <label htmlFor="method_category" className="gov-label">
-                  Category (human-selected) <span className="gov-required" aria-hidden="true">*</span>
+                  Intervention category <span className="gov-required" aria-hidden="true">*</span>
                 </label>
                 <select
                   id="method_category"
                   name="method_category"
                   required
                   defaultValue=""
+                  aria-describedby="method_category_help"
                   className="gov-select"
                 >
                   <option value="" disabled>
@@ -603,6 +604,9 @@ export default function InterventionsPage() {
                     </option>
                   ))}
                 </select>
+                <p id="method_category_help" className="gov-field-help">
+                  Human-selected documentation label. It does not prescribe a treatment.
+                </p>
               </div>
               <div className="gov-field gov-field-wide">
                 <label htmlFor="method_description" className="gov-label">
@@ -653,7 +657,7 @@ export default function InterventionsPage() {
               </div>
               <div className="gov-field gov-field-wide">
                 <label htmlFor="follow_up_due_on" className="gov-label">
-                  Planned follow-up date (optional)
+                  Planned follow-up date <span className="gov-label-optional">(optional)</span>
                 </label>
                 <input
                   id="follow_up_due_on"
@@ -678,17 +682,19 @@ export default function InterventionsPage() {
               {formError}
             </p>
           )}
-          {notice && (
+          {notice && notice !== detailNotice && (
             <p role="status" className="gov-alert gov-alert-success mt-4">
               {notice}
             </p>
           )}
         </section>
 
-        <section aria-label="Intervention records" className="gov-card gov-record-section">
+        <section aria-labelledby="intervention-records-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
             <div>
-              <h2 className="gov-record-title">Intervention records</h2>
+              <h2 id="intervention-records-heading" className="gov-record-title">
+                Intervention records
+              </h2>
               {!loading && listError === null && (
                 <p className="gov-record-meta">
                   {interventions.length} {interventions.length === 1 ? "record" : "records"} shown
@@ -736,12 +742,13 @@ export default function InterventionsPage() {
                 disabled={loading}
                 className="gov-button gov-button-secondary gov-button-compact"
               >
+                <Icon name="refresh" size={15} />
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
           {loading ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading interventions...
             </p>
           ) : listError ? (
@@ -760,22 +767,25 @@ export default function InterventionsPage() {
                     <th scope="col">Intervention</th>
                     <th scope="col">Case / Farm / Farmer</th>
                     <th scope="col">Agriculture Technician</th>
-                    <th scope="col">Status</th>
+                    <th scope="col">Case status</th>
                     <th scope="col">Follow-up</th>
                     <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {interventions.map((entry) => {
-                    const completed = !isPending(entry);
+                    const followUp = followUpDisplay(interventions, entry);
                     const cycle = cycleFor(interventions, entry);
                     return (
-                      <tr key={entry.id}>
+                      <tr
+                        key={entry.id}
+                        className={selectedId === entry.id ? "gov-row-selected" : undefined}
+                      >
                         <td>
                           <span className="gov-cell-primary">#{entry.id}</span>{" "}
                           <span className="gov-tag">{entry.method_category}</span>
                           <span className="gov-cell-meta">
-                            Cycle {cycle} · Scheduled {entry.scheduled_for}
+                            Cycle {cycle} · Scheduled {formatDisplayDate(entry.scheduled_for)}
                           </span>
                         </td>
                         <td>
@@ -787,6 +797,9 @@ export default function InterventionsPage() {
                         </td>
                         <td>
                           {entry.assigned_to?.full_name ?? `#${entry.assigned_to_user_id}`}
+                          {entry.assigned_to_user_id === userId && (
+                            <span className="gov-cell-meta">Assigned to you</span>
+                          )}
                         </td>
                         <td>
                           <span
@@ -796,11 +809,12 @@ export default function InterventionsPage() {
                           </span>
                         </td>
                         <td>
-                          <span
-                            className={followUpBadge(entry.follow_up_due_on)}
-                          >
-                            {followUpLabel(entry.follow_up_due_on, completed)}
-                          </span>
+                          <span className={followUp.badge}>{followUp.label}</span>
+                          {entry.follow_up_due_on !== null && (
+                            <span className="gov-cell-meta">
+                              Due {formatDisplayDate(entry.follow_up_due_on)}
+                            </span>
+                          )}
                         </td>
                         <td className="gov-col-actions">
                           <button
@@ -809,6 +823,7 @@ export default function InterventionsPage() {
                             className="gov-button gov-button-secondary gov-button-compact"
                           >
                             {selectedId === entry.id ? "Selected" : "View"}
+                            <span className="sr-only"> intervention #{entry.id}</span>
                           </button>
                         </td>
                       </tr>
@@ -822,11 +837,13 @@ export default function InterventionsPage() {
 
         {selectedId !== null && (
           <section
+            ref={detailRef}
+            tabIndex={-1}
             aria-label="Intervention detail"
-            className="gov-card gov-record-section"
+            className="gov-card gov-record-section gov-record-section--selected"
           >
             {loadingDetail ? (
-              <p role="status" className="gov-empty-state">
+              <p role="status" className="gov-loading-state">
                 Loading intervention details...
               </p>
             ) : detailError ? (
@@ -836,14 +853,24 @@ export default function InterventionsPage() {
             ) : detail ? (
               <div>
                 <div className="gov-record-toolbar">
-                  <h2 className="gov-record-title">
-                    Intervention #{detail.id} — {detail.pest_case.pest_name} (cycle{" "}
-                    {cycleFor(interventions, detail)})
-                  </h2>
-                  <span
-                    className={statusBadge(detail.pest_case.status)}
-                  >
-                    {workflowLabel(detail.pest_case.status)}
+                  <div>
+                    <p className="gov-record-eyebrow">
+                      Intervention #{detail.id} · Case #{detail.pest_case_id} · Cycle{" "}
+                      {cycleFor(interventions, detail)}
+                    </p>
+                    <h2 className="gov-record-title">{detail.pest_case.pest_name}</h2>
+                  </div>
+                  <span className="gov-table-actions">
+                    <span className={statusBadge(detail.pest_case.status)}>
+                      {workflowLabel(detail.pest_case.status)}
+                    </span>
+                    <Link
+                      href={`/pest-cases/${detail.pest_case_id}`}
+                      className="gov-button gov-button-secondary gov-button-compact"
+                    >
+                      <Icon name="history" size={15} />
+                      Open case record
+                    </Link>
                   </span>
                 </div>
                 <dl className="gov-detail-grid">
@@ -862,37 +889,40 @@ export default function InterventionsPage() {
                     </dd>
                   </div>
                   <div>
-                    <dt className="gov-detail-label">Category</dt>
+                    <dt className="gov-detail-label">Intervention category</dt>
                     <dd className="gov-detail-value">{detail.method_category}</dd>
                   </div>
                   <div>
-                    <dt className="gov-detail-label">Assigned Agriculture Technician</dt>
+                    <dt className="gov-detail-label">Responsible Agriculture Technician</dt>
                     <dd className="gov-detail-value">
                       {detail.assigned_to?.full_name ?? `#${detail.assigned_to_user_id}`}
+                      {detail.assigned_to_user_id === userId && " (you)"}
                     </dd>
                   </div>
                   <div>
                     <dt className="gov-detail-label">Scheduled for</dt>
-                    <dd className="gov-detail-value">{detail.scheduled_for}</dd>
+                    <dd className="gov-detail-value">{formatDisplayDate(detail.scheduled_for)}</dd>
                   </div>
                   <div>
                     <dt className="gov-detail-label">Follow-up due</dt>
                     <dd className="gov-detail-value">
-                      <span
-                        className={followUpBadge(detail.follow_up_due_on)}
-                      >
-                        {followUpLabel(detail.follow_up_due_on, !isPending(detail))}
-                      </span>
+                      {detailFollowUp && (
+                        <span className={detailFollowUp.badge}>
+                          {detail.follow_up_due_on === null
+                            ? detailFollowUp.label
+                            : `${formatDisplayDate(detail.follow_up_due_on)} — ${detailFollowUp.label}`}
+                        </span>
+                      )}
                     </dd>
                   </div>
                   <div className="gov-detail-wide">
-                    <dt className="gov-detail-label">Description</dt>
+                    <dt className="gov-detail-label">Documented action</dt>
                     <dd className="gov-detail-value">{detail.method_description}</dd>
                   </div>
                   {detail.performed_on !== null && (
                     <div>
                       <dt className="gov-detail-label">Performed on</dt>
-                      <dd className="gov-detail-value">{detail.performed_on}</dd>
+                      <dd className="gov-detail-value">{formatDisplayDate(detail.performed_on)}</dd>
                     </div>
                   )}
                   {detail.completion_notes !== null && (
@@ -910,6 +940,11 @@ export default function InterventionsPage() {
                         <h3 className="gov-record-title">
                           Edit intervention plan
                         </h3>
+                        <p className="gov-record-intro">
+                          Update the plan before completion is recorded. Blank fields keep their
+                          current values, except the planned follow-up date, which is cleared
+                          when left blank.
+                        </p>
                         <form
                           onSubmit={(event) => void handlePlan(event, detail)}
                           className="gov-form gov-form-grid"
@@ -919,7 +954,7 @@ export default function InterventionsPage() {
                               htmlFor="plan_category"
                               className="gov-label"
                             >
-                              Category (optional)
+                              Category <span className="gov-label-optional">(optional)</span>
                             </label>
                             <select
                               id="plan_category"
@@ -940,7 +975,7 @@ export default function InterventionsPage() {
                               htmlFor="plan_scheduled"
                               className="gov-label"
                             >
-                              Scheduled date (optional)
+                              Scheduled date <span className="gov-label-optional">(optional)</span>
                             </label>
                             <input
                               id="plan_scheduled"
@@ -954,7 +989,7 @@ export default function InterventionsPage() {
                               htmlFor="plan_description"
                               className="gov-label"
                             >
-                              Description (optional)
+                              Description <span className="gov-label-optional">(optional)</span>
                             </label>
                             <textarea
                               id="plan_description"
@@ -970,7 +1005,7 @@ export default function InterventionsPage() {
                               htmlFor="plan_technician"
                               className="gov-label"
                             >
-                              Agriculture Technician (optional)
+                              Agriculture Technician <span className="gov-label-optional">(optional)</span>
                             </label>
                             <select
                               id="plan_technician"
@@ -991,7 +1026,7 @@ export default function InterventionsPage() {
                               htmlFor="plan_follow_up"
                               className="gov-label"
                             >
-                              Planned follow-up (optional, blank clears)
+                              Planned follow-up <span className="gov-label-optional">(optional, blank clears)</span>
                             </label>
                             <input
                               id="plan_follow_up"
@@ -1004,7 +1039,7 @@ export default function InterventionsPage() {
                             <button
                               type="submit"
                               disabled={savingPlan || completing}
-                              className="gov-button gov-button-primary"
+                              className="gov-button gov-button-secondary"
                             >
                               {savingPlan ? "Saving..." : "Save plan"}
                             </button>
@@ -1015,10 +1050,16 @@ export default function InterventionsPage() {
                         <h3 className="gov-record-title">
                           Record completion
                         </h3>
+                        <p className="gov-record-intro">
+                          Record when the work was performed and what was done. A follow-up due
+                          date, entered here or reused from the plan, is required and starts the
+                          follow-up and reassessment stage.
+                        </p>
                         <form
                           onSubmit={(event) => void handleComplete(event, detail)}
                           className="gov-form gov-form-grid"
                         >
+                          <RequiredLegend />
                           <div className="gov-field">
                             <label
                               htmlFor="performed_on"
@@ -1077,7 +1118,7 @@ export default function InterventionsPage() {
                                 htmlFor="reuse_planned_follow_up_date"
                                 className="gov-inline-label"
                               >
-                                Reuse planned follow-up date ({detail.follow_up_due_on})
+                                Reuse planned follow-up date ({formatDisplayDate(detail.follow_up_due_on)})
                               </label>
                             </div>
                           )}
@@ -1094,15 +1135,18 @@ export default function InterventionsPage() {
                       </div>
                     </div>
                   ) : (
-                    <p role="status" className="gov-timeline-note">
-                      Only an administrator or the assigned agriculture technician can edit or
+                    <p role="status" className="gov-callout mt-4">
+                      Only an Administrator or the assigned Agriculture Technician can edit or
                       complete this intervention.
                     </p>
                   )
                 ) : (
-                  <p role="status" className="gov-timeline-note">
-                    This intervention is complete and read-only. Follow-up is pending
-                    for {detail.follow_up_due_on ?? "an unset date"}.{" "}
+                  <p role="status" className="gov-callout mt-4">
+                    This intervention is complete and read-only. Planned follow-up date:{" "}
+                    {detail.follow_up_due_on === null
+                      ? "not set"
+                      : formatDisplayDate(detail.follow_up_due_on)}
+                    .{" "}
                     <Link
                       href="/follow-ups"
                       className="gov-activity-link"
@@ -1114,6 +1158,11 @@ export default function InterventionsPage() {
                 {actionError && (
                   <p role="alert" className="gov-alert gov-alert-error mt-4">
                     {actionError}
+                  </p>
+                )}
+                {detailNotice && (
+                  <p role="status" className="gov-alert gov-alert-success">
+                    {detailNotice}
                   </p>
                 )}
               </div>

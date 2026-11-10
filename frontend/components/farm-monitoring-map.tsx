@@ -2,6 +2,7 @@
 
 import { Component, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 
 import {
   FARM_MAP_LEGEND,
@@ -16,7 +17,7 @@ const FarmMonitoringMapClient = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="gov-monitoring-map-message" role="status">
+      <div className="gov-monitoring-map-message gov-map-loading" role="status">
         Loading interactive map...
       </div>
     ),
@@ -82,10 +83,19 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
       </div>
 
       {mapped.length === 0 ? (
-        <div className="gov-monitoring-map-message" role="status">
-          {counts.ALL > 0
-            ? "No mapped farms match this filter."
-            : "No mapped farms available. Farms appear here once an approximate location is recorded."}
+        <div className="gov-monitoring-map-message gov-map-empty" role="status">
+          {counts.ALL > 0 ? (
+            "No mapped farms match this filter."
+          ) : (
+            <span>
+              No mapped farms available. Farms appear here once an approximate location is
+              recorded on the{" "}
+              <Link href="/farms" className="gov-activity-link">
+                Farms page
+              </Link>
+              .
+            </span>
+          )}
         </div>
       ) : (
         <MonitoringMapErrorBoundary key={filter}>
@@ -99,8 +109,9 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
             Status guide
           </h3>
           <p className="gov-map-help">
-            Marker colours show the latest authorized workflow state for each farm.
-            Select a marker to review its farm and case details.
+            Marker colours show the latest workflow state you are authorized to see for
+            each farm. Hover over a marker for a summary, or select it to review farm and
+            case details.
           </p>
           <ul className="gov-map-legend">
             {FARM_MAP_LEGEND.map((item) => (

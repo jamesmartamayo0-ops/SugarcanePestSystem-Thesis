@@ -5,6 +5,14 @@ import { useRouter } from "next/navigation";
 
 import { roleDisplayName } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Icon } from "@/components/icons";
+import {
+  PageHeader,
+  RequiredLegend,
+  SessionNotice,
+  StatusScreen,
+} from "@/components/ui";
 import {
   UsersRequestError,
   createUser,
@@ -24,6 +32,7 @@ export default function AdminPage() {
   const [formNotice, setFormNotice] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<ManagedUser | null>(null);
 
   const role = auth.status === "authenticated" ? auth.user.role : null;
   const isAdmin = role === "ADMIN";
@@ -169,53 +178,34 @@ export default function AdminPage() {
     }
   }
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
   if (auth.user.role !== "ADMIN") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to dashboard...</p>
-      </main>
-    );
+    return <StatusScreen message="Redirecting to dashboard..." />;
   }
 
   const selfId = auth.user.id;
+  const activeCount = users.filter((entry) => entry.is_active).length;
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">User Management</h1>
-        <p className="gov-page-description">Manage authorized personnel accounts and system access.</p>
-      </header>
+      <PageHeader
+        title="User Management"
+        description="Manage authorized personnel accounts and system access. Available to Administrators only."
+      />
 
-        <section aria-label="Create staff account" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Create staff account</h2>
+        <section aria-labelledby="create-account-heading" className="gov-card gov-record-section">
+          <h2 id="create-account-heading" className="gov-record-title">
+            Create staff account
+          </h2>
+          <p className="gov-record-intro">
+            Create a sign-in account for an authorized staff member. The role determines what
+            the account can see and do.
+          </p>
           <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+            <RequiredLegend />
             <div className="gov-field">
               <label htmlFor="username" className="gov-label">
                 Username <span className="gov-required" aria-hidden="true">*</span>
@@ -246,7 +236,7 @@ export default function AdminPage() {
             </div>
             <div className="gov-field">
               <label htmlFor="password" className="gov-label">
-                Password (at least 12 characters) <span className="gov-required" aria-hidden="true">*</span>
+                Initial password <span className="gov-required" aria-hidden="true">*</span>
               </label>
               <input
                 id="password"
@@ -256,8 +246,12 @@ export default function AdminPage() {
                 maxLength={1024}
                 minLength={12}
                 required
+                aria-describedby="password_help"
                 className="gov-input"
               />
+              <p id="password_help" className="gov-field-help">
+                At least 12 characters. Give it to the staff member privately.
+              </p>
             </div>
             <div className="gov-field">
               <label htmlFor="role" className="gov-label">
@@ -267,11 +261,16 @@ export default function AdminPage() {
                 id="role"
                 name="role"
                 defaultValue="TECHNICIAN"
+                aria-describedby="role_help"
                 className="gov-select"
               >
                 <option value="TECHNICIAN">Agriculture Technician</option>
                 <option value="ADMIN">Administrator</option>
               </select>
+              <p id="role_help" className="gov-field-help">
+                Agriculture Technicians see the records connected to their assigned work.
+                Administrators have office-wide access.
+              </p>
             </div>
             <div className="gov-form-actions">
               <button
@@ -279,6 +278,7 @@ export default function AdminPage() {
                 disabled={creating}
                 className="gov-button gov-button-primary"
               >
+                <Icon name="plus" size={16} />
                 {creating ? "Creating..." : "Create account"}
               </button>
             </div>
@@ -295,25 +295,39 @@ export default function AdminPage() {
           )}
         </section>
 
-        <section aria-label="Staff accounts" className="gov-card gov-record-section">
+        <section aria-labelledby="staff-accounts-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
-            <h2 className="gov-record-title">Staff accounts</h2>
+            <div>
+              <h2 id="staff-accounts-heading" className="gov-record-title">
+                Staff accounts
+              </h2>
+              {!loadingList && listError === null && (
+                <p className="gov-record-meta">
+                  {users.length} {users.length === 1 ? "account" : "accounts"} · {activeCount} active
+                </p>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => void refresh()}
               disabled={loadingList}
               className="gov-button gov-button-secondary gov-button-compact"
             >
+              <Icon name="refresh" size={15} />
               {loadingList ? "Refreshing..." : "Refresh"}
             </button>
           </div>
           {loadingList ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading staff accounts...
             </p>
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error gov-feedback">
               {listError}
+            </p>
+          ) : users.length === 0 ? (
+            <p role="status" className="gov-empty-state">
+              No staff accounts found.
             </p>
           ) : (
             <div className="gov-table-wrap mt-4">
@@ -334,9 +348,9 @@ export default function AdminPage() {
                     return (
                       <tr key={entry.id}>
                         <td>
-                          {entry.username}
+                          <span className="gov-cell-primary">{entry.username}</span>
                           {isSelf && (
-                            <span className="gov-status-badge ml-2">
+                            <span className="gov-status-badge gov-tone-brand ml-2">
                               You
                             </span>
                           )}
@@ -355,7 +369,13 @@ export default function AdminPage() {
                         <td className="gov-col-actions">
                           <button
                             type="button"
-                            onClick={() => void handleToggle(entry)}
+                            onClick={() => {
+                              if (entry.is_active) {
+                                setConfirmTarget(entry);
+                              } else {
+                                void handleToggle(entry);
+                              }
+                            }}
                             disabled={isSelf || busy}
                             title={
                               isSelf
@@ -391,6 +411,34 @@ export default function AdminPage() {
             </p>
           )}
         </section>
+
+        <ConfirmDialog
+          open={confirmTarget !== null}
+          title={`Deactivate ${confirmTarget?.username ?? "account"}?`}
+          description={
+            <>
+              <p>
+                {confirmTarget?.full_name ?? "This staff member"} will be signed out and will no
+                longer be able to sign in.
+              </p>
+              <p>
+                Records they created stay in the system. The account can be activated again
+                later.
+              </p>
+            </>
+          }
+          confirmLabel="Deactivate account"
+          busyLabel="Deactivating..."
+          busy={confirmTarget !== null && togglingId === confirmTarget.id}
+          onCancel={() => setConfirmTarget(null)}
+          onConfirm={() => {
+            const target = confirmTarget;
+            if (target === null) {
+              return;
+            }
+            void handleToggle(target).finally(() => setConfirmTarget(null));
+          }}
+        />
     </main>
   );
 }

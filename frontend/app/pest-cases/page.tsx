@@ -4,8 +4,17 @@ import Link from "next/link";
 import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { workflowBadgeClass, workflowLabel } from "@/lib/presentation";
+import { formatDisplayDate, workflowBadgeClass, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
+import { Icon } from "@/components/icons";
+import {
+  PageHeader,
+  RequiredLegend,
+  SessionNotice,
+  StatusScreen,
+  useRevealOnChange,
+} from "@/components/ui";
+import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   FarmsRequestError,
   listFarms,
@@ -54,13 +63,34 @@ function farmSummary(farms: FarmWithFarmer[], farmId: number) {
   );
 }
 
+const CASE_STATUSES: PestCaseStatus[] = [
+  "REPORTED",
+  "FOR_INSPECTION",
+  "INSPECTION_SCHEDULED",
+  "FIELD_VALIDATED",
+  "NOT_CONFIRMED",
+  "UNDER_INTERVENTION",
+  "FOLLOW_UP_DUE",
+  "REINTERVENTION_REQUIRED",
+  "CLOSED",
+];
+
+// Dashboard links pass ?status=...; only known workflow values are honoured.
+function statusFromParams(raw: string | null): "all" | PestCaseStatus {
+  return raw !== null && (CASE_STATUSES as string[]).includes(raw)
+    ? (raw as PestCaseStatus)
+    : "all";
+}
+
 function PestCasesPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const auth = useAuth();
   const [farms, setFarms] = useState<FarmWithFarmer[]>([]);
   const [cases, setCases] = useState<PestCaseSummary[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | PestCaseStatus>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | PestCaseStatus>(() =>
+    statusFromParams(searchParams.get("status")),
+  );
   const [farmFilter, setFarmFilter] = useState<string>("all");
   const [farmerFilter, setFarmerFilter] = useState<string>("all");
   const [searchInput, setSearchInput] = useState<string>("");
@@ -90,6 +120,7 @@ function PestCasesPageInner() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const authenticated = auth.status === "authenticated";
+  const detailRef = useRevealOnChange<HTMLElement>(loadingDetail ? null : selectedId);
 
   useEffect(() => {
     if (auth.status === "unauthenticated") {
@@ -169,12 +200,14 @@ function PestCasesPageInner() {
       return;
     }
     let active = true;
+    const linkedStatus = statusFromParams(searchParams.get("status"));
     (async () => {
       setLoadingList(true);
+      setStatusFilter(linkedStatus);
       try {
         const [loadedFarms, loadedCases] = await Promise.all([
           listFarms(),
-          listPestCases(),
+          listPestCases({ status: linkedStatus }),
         ]);
         if (!active) {
           return;
@@ -409,47 +442,36 @@ function PestCasesPageInner() {
     }
   }
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Pest Cases</h1>
-        <p className="gov-page-description">
-          Record and manage reported sugarcane pest cases through the inspection and
-          intervention workflow.
-        </p>
-      </header>
+      <PageHeader
+        title="Pest Cases"
+        description="Record and manage reported sugarcane pest cases through the inspection and intervention workflow."
+        related={[
+          { href: "/farms", label: "Farms" },
+          { href: "/inspections", label: "Inspections" },
+          { href: "/reports", label: "Reports" },
+        ]}
+      />
+      <WorkflowSteps current="report" />
 
-        <section aria-label="Report pest case" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Report pest case</h2>
-          <p className="gov-field-help">
-            Reported area is a pre-inspection estimate and must not exceed the farm&apos;s recorded sugarcane area.
+        <section
+          id="report-case"
+          aria-labelledby="report-case-heading"
+          className="gov-card gov-record-section"
+        >
+          <p className="gov-record-eyebrow">Initial report</p>
+          <h2 id="report-case-heading" className="gov-record-title">
+            Report pest case
+          </h2>
+          <p className="gov-record-intro">
+            Record a pest report from a farmer or a field observation. Reported details remain
+            an initial estimate until a field inspection validates them. The reported area is a
+            pre-inspection estimate and must not exceed the farm&apos;s recorded sugarcane area.
           </p>
           {farms.length === 0 && !loadingList ? (
             <p role="status" className="gov-empty-state">
@@ -460,6 +482,7 @@ function PestCasesPageInner() {
             </p>
           ) : (
             <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+              <RequiredLegend />
               <div className="gov-field">
                 <label htmlFor="farm_id" className="gov-label">
                   Farm <span className="gov-required" aria-hidden="true">*</span>
@@ -500,7 +523,7 @@ function PestCasesPageInner() {
               </div>
               <div className="gov-field gov-field-wide">
                 <label htmlFor="symptoms" className="gov-label">
-                  Symptoms / observations (optional)
+                  Symptoms / observations <span className="gov-label-optional">(optional)</span>
                 </label>
                 <textarea
                   id="symptoms"
@@ -513,7 +536,7 @@ function PestCasesPageInner() {
               </div>
               <div className="gov-field">
                 <label htmlFor="observed_on" className="gov-label">
-                  Observation date (optional)
+                  Observation date <span className="gov-label-optional">(optional)</span>
                 </label>
                 <input
                   id="observed_on"
@@ -544,6 +567,7 @@ function PestCasesPageInner() {
                   disabled={creating}
                   className="gov-button gov-button-primary"
                 >
+                  <Icon name="plus" size={16} />
                   {creating ? "Reporting..." : "Report pest case"}
                 </button>
               </div>
@@ -561,8 +585,10 @@ function PestCasesPageInner() {
           )}
         </section>
 
-        <section aria-label="Pest case records" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Pest case records</h2>
+        <section aria-labelledby="case-records-heading" className="gov-card gov-record-section">
+          <h2 id="case-records-heading" className="gov-record-title">
+            Pest case records
+          </h2>
           {!loadingList && listError === null && (
             <p className="gov-record-meta">
               {cases.length} {cases.length === 1 ? "case" : "cases"} shown
@@ -594,7 +620,7 @@ function PestCasesPageInner() {
                 maxLength={120}
                 autoComplete="off"
                 placeholder="e.g. Stem Borer, Juan, Plot A, Bunao"
-                className="gov-input"
+                className="gov-input gov-input-search"
               />
             </div>
             <div className="gov-field">
@@ -653,8 +679,12 @@ function PestCasesPageInner() {
                 }}
                 placeholder="All"
                 inputMode="numeric"
+                aria-describedby="farmer_filter_help"
                 className="gov-input"
               />
+              <p id="farmer_filter_help" className="gov-field-help">
+                Farmer ID as listed on the Farmers page.
+              </p>
             </div>
             <div className="gov-field">
               <label htmlFor="reported_from" className="gov-label">
@@ -720,7 +750,7 @@ function PestCasesPageInner() {
             </p>
           )}
           {loadingList ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading pest cases...
             </p>
           ) : listError ? (
@@ -736,7 +766,7 @@ function PestCasesPageInner() {
               <table className="gov-table min-w-[720px]">
                 <thead>
                   <tr>
-                    <th scope="col">Case</th>
+                    <th scope="col" className="gov-col-wide">Case</th>
                     <th scope="col">Farm and farmer</th>
                     <th scope="col" className="gov-cell-num">Reported area (ha)</th>
                     <th scope="col">Status</th>
@@ -746,7 +776,10 @@ function PestCasesPageInner() {
                 </thead>
                 <tbody>
                   {cases.map((entry) => (
-                    <tr key={entry.id}>
+                    <tr
+                      key={entry.id}
+                      className={selectedId === entry.id ? "gov-row-selected" : undefined}
+                    >
                       <td>
                         <span className="gov-cell-primary">{entry.pest_name}</span>
                         <span className="gov-cell-meta">Case #{entry.id}</span>
@@ -758,7 +791,7 @@ function PestCasesPageInner() {
                           {workflowLabel(entry.status)}
                         </span>
                       </td>
-                      <td>{entry.observed_on ?? "—"}</td>
+                      <td className="gov-cell-nowrap">{formatDisplayDate(entry.observed_on)}</td>
                       <td className="gov-col-actions">
                         <div className="gov-table-actions">
                           <button
@@ -767,12 +800,14 @@ function PestCasesPageInner() {
                             className="gov-button gov-button-secondary gov-button-compact"
                           >
                             {selectedId === entry.id ? "Selected" : "View"}
+                            <span className="sr-only"> details for case #{entry.id}</span>
                           </button>
                           <Link
                             href={`/pest-cases/${entry.id}`}
                             className="gov-button gov-button-secondary gov-button-compact"
                           >
-                            Timeline
+                            <Icon name="history" size={15} />
+                            Case record<span className="sr-only"> for case #{entry.id}</span>
                           </Link>
                         </div>
                       </td>
@@ -785,9 +820,14 @@ function PestCasesPageInner() {
         </section>
 
         {selectedId !== null && (
-          <section aria-label="Pest case detail" className="gov-card gov-record-section">
+          <section
+            ref={detailRef}
+            tabIndex={-1}
+            aria-label="Pest case detail"
+            className="gov-card gov-record-section gov-record-section--selected"
+          >
             {loadingDetail ? (
-              <p role="status" className="gov-page-description">
+              <p role="status" className="gov-loading-state">
                 Loading pest case details...
               </p>
             ) : detailError ? (
@@ -797,20 +837,20 @@ function PestCasesPageInner() {
             ) : detail ? (
               <div>
                 <div className="gov-record-toolbar">
-                  <h2 className="gov-record-title">
-                    {detail.pest_name}
-                  </h2>
+                  <div>
+                    <p className="gov-record-eyebrow">Case #{detail.id} · Initial report</p>
+                    <h2 className="gov-record-title">{detail.pest_name}</h2>
+                  </div>
                   <span className="gov-table-actions">
-                    <span
-                      className={statusBadge(detail.status)}
-                    >
+                    <span className={statusBadge(detail.status)}>
                       {workflowLabel(detail.status)}
                     </span>
                     <Link
                       href={`/pest-cases/${detail.id}`}
                       className="gov-button gov-button-secondary gov-button-compact"
                     >
-                      Full timeline
+                      <Icon name="history" size={15} />
+                      Open case record
                     </Link>
                   </span>
                 </div>
@@ -836,7 +876,7 @@ function PestCasesPageInner() {
                   </div>
                   <div>
                     <dt className="gov-detail-label">Observed on</dt>
-                    <dd className="gov-detail-value">{detail.observed_on ?? "—"}</dd>
+                    <dd className="gov-detail-value">{formatDisplayDate(detail.observed_on)}</dd>
                   </div>
                   <div className="gov-detail-wide">
                     <dt className="gov-detail-label">Symptoms</dt>
@@ -853,6 +893,10 @@ function PestCasesPageInner() {
                 {detail.status === "REPORTED" ? (
                   <div className="gov-workflow-panel">
                     <h3 className="gov-record-title">Edit report details</h3>
+                    <p className="gov-record-intro">
+                      Report details can be corrected while the case is Reported. Submitting
+                      it for inspection locks the initial report.
+                    </p>
                     <form
                       onSubmit={(event) => void handleEdit(event, detail)}
                       className="gov-form gov-form-grid"
@@ -890,7 +934,7 @@ function PestCasesPageInner() {
                       </div>
                       <div className="gov-field">
                         <label htmlFor="edit_observed_on" className="gov-label">
-                          Observation date (optional)
+                          Observation date <span className="gov-label-optional">(optional)</span>
                         </label>
                         <input
                           id="edit_observed_on"
@@ -902,7 +946,7 @@ function PestCasesPageInner() {
                       </div>
                       <div className="gov-field">
                         <label htmlFor="edit_symptoms" className="gov-label">
-                          Symptoms (optional)
+                          Symptoms <span className="gov-label-optional">(optional)</span>
                         </label>
                         <textarea
                           id="edit_symptoms"
@@ -938,8 +982,9 @@ function PestCasesPageInner() {
                     )}
                   </div>
                 ) : detail.status === "FIELD_VALIDATED" ? (
-                  <p role="status" className="gov-timeline-note mt-4">
-                    This case is validated and ready for an intervention plan.{" "}
+                  <p role="status" className="gov-callout mt-4">
+                    Field validation confirmed pest damage. This case is ready for an
+                    intervention plan.{" "}
                     <Link
                       href="/interventions"
                       className="gov-activity-link"
@@ -951,7 +996,7 @@ function PestCasesPageInner() {
                   detail.status === "FOLLOW_UP_DUE" ||
                   detail.status === "REINTERVENTION_REQUIRED" ||
                   detail.status === "CLOSED" ? (
-                  <p role="status" className="gov-timeline-note mt-4">
+                  <p role="status" className="gov-callout mt-4">
                     This case has an intervention record.{" "}
                     <Link
                       href="/interventions"
@@ -966,9 +1011,17 @@ function PestCasesPageInner() {
                       Go to follow-ups
                     </Link>
                   </p>
+                ) : detail.status === "NOT_CONFIRMED" ? (
+                  <p role="status" className="gov-callout mt-4">
+                    The field inspection did not confirm pest damage. The initial report is kept
+                    for the record and can no longer be edited here.
+                  </p>
                 ) : (
-                  <p role="status" className="gov-timeline-note mt-4">
-                    This case is queued for inspection and can no longer be edited here.
+                  <p role="status" className="gov-callout mt-4">
+                    This case is queued for inspection and can no longer be edited here.{" "}
+                    <Link href="/inspections" className="gov-activity-link">
+                      Go to inspections
+                    </Link>
                   </p>
                 )}
                 {actionError && (
@@ -987,11 +1040,7 @@ function PestCasesPageInner() {
 export default function PestCasesPage() {
   return (
     <Suspense
-      fallback={
-        <main className="gov-status-page">
-          <p role="status" className="gov-status-message">Loading pest cases...</p>
-        </main>
-      }
+      fallback={<StatusScreen message="Loading pest cases..." />}
     >
       <PestCasesPageInner />
     </Suspense>

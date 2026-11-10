@@ -4,12 +4,15 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { formatDisplayDate, workflowBadgeClass } from "@/lib/presentation";
+import { formatDisplayDate, workflowBadgeClass, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import FarmMonitoringMap from "@/components/farm-monitoring-map";
+import { Icon, type IconName } from "@/components/icons";
+import { PageHeader, SessionNotice } from "@/components/ui";
 import {
   DashboardRequestError,
   getDashboardSummary,
+  type DashboardActionNeeded,
   type DashboardSummary,
 } from "@/lib/dashboard";
 import {
@@ -17,25 +20,112 @@ import {
   getFarmMap,
   type FarmMapProjection,
 } from "@/lib/farm-map";
+import type { PestCaseStatus } from "@/lib/pest-cases";
 
-const WORKFLOW_ITEMS = [
-  { status: "REPORTED", label: "Reported", href: "/pest-cases?status=REPORTED" },
-  { status: "FOR_INSPECTION", label: "For Inspection", href: "/inspections" },
-  { status: "INSPECTION_SCHEDULED", label: "Inspection Scheduled", href: "/inspections" },
-  { status: "FIELD_VALIDATED", label: "Field Validated", href: "/interventions" },
-  { status: "NOT_CONFIRMED", label: "Not Confirmed", href: "/pest-cases?status=NOT_CONFIRMED" },
-  { status: "UNDER_INTERVENTION", label: "Under Intervention", href: "/interventions" },
-  { status: "FOLLOW_UP_DUE", label: "Follow-up Due", href: "/follow-ups" },
-  { status: "REINTERVENTION_REQUIRED", label: "Reintervention Required", href: "/follow-ups" },
-  { status: "CLOSED", label: "Closed", href: "/pest-cases?status=CLOSED" },
-] as const;
+// Case lifecycle grouped by stage. Counts come straight from the summary API.
+const PIPELINE: { title: string; items: { status: PestCaseStatus; href: string }[] }[] = [
+  {
+    title: "Intake",
+    items: [
+      { status: "REPORTED", href: "/pest-cases?status=REPORTED" },
+      { status: "FOR_INSPECTION", href: "/inspections" },
+      { status: "INSPECTION_SCHEDULED", href: "/inspections" },
+    ],
+  },
+  {
+    title: "Field validation",
+    items: [
+      { status: "FIELD_VALIDATED", href: "/interventions" },
+      { status: "NOT_CONFIRMED", href: "/pest-cases?status=NOT_CONFIRMED" },
+    ],
+  },
+  {
+    title: "Intervention & follow-up",
+    items: [
+      { status: "UNDER_INTERVENTION", href: "/interventions" },
+      { status: "FOLLOW_UP_DUE", href: "/follow-ups" },
+      { status: "REINTERVENTION_REQUIRED", href: "/interventions" },
+    ],
+  },
+  {
+    title: "Outcome",
+    items: [{ status: "CLOSED", href: "/pest-cases?status=CLOSED" }],
+  },
+];
 
-const ATTENTION_ITEMS = [
-  { key: "overdue_follow_ups", label: "Overdue follow-ups", description: "Due before today (Asia/Manila) and still awaiting follow-up.", accent: "danger" },
-  { key: "reintervention_required", label: "Requiring reintervention", accent: "warning" },
-  { key: "awaiting_inspection_scheduling", label: "Waiting for inspection scheduling", accent: "warning" },
-  { key: "validated_awaiting_intervention", label: "Validated awaiting intervention", accent: "warning" },
-] as const;
+type AttentionItem = {
+  key: keyof DashboardActionNeeded;
+  label: string;
+  description: string;
+  href: string;
+  action: string;
+  tone: "danger" | "warning";
+};
+
+const ATTENTION_ITEMS: AttentionItem[] = [
+  {
+    key: "overdue_follow_ups",
+    label: "Overdue follow-ups",
+    description: "Due before today (Asia/Manila) and still awaiting follow-up.",
+    href: "/follow-ups",
+    action: "Open follow-ups",
+    tone: "danger",
+  },
+  {
+    key: "reintervention_required",
+    label: "Requiring reintervention",
+    description: "Reassessment found that further intervention is required.",
+    href: "/interventions",
+    action: "Open interventions",
+    tone: "warning",
+  },
+  {
+    key: "awaiting_inspection_scheduling",
+    label: "Waiting for inspection scheduling",
+    description: "Submitted for inspection; no inspection scheduled yet.",
+    href: "/inspections",
+    action: "Open inspections",
+    tone: "warning",
+  },
+  {
+    key: "validated_awaiting_intervention",
+    label: "Validated awaiting intervention",
+    description: "Pest damage confirmed in the field; no intervention started yet.",
+    href: "/interventions",
+    action: "Open interventions",
+    tone: "warning",
+  },
+];
+
+const IN_PROGRESS_ITEMS: {
+  key: keyof DashboardActionNeeded;
+  label: string;
+  hint: string;
+  href: string;
+  icon: IconName;
+}[] = [
+  {
+    key: "inspections_scheduled_awaiting_validation",
+    label: "Scheduled inspections",
+    hint: "Field findings not yet recorded",
+    href: "/inspections",
+    icon: "inspection",
+  },
+  {
+    key: "interventions_in_progress",
+    label: "Interventions in progress",
+    hint: "Completion not yet recorded",
+    href: "/interventions",
+    icon: "intervention",
+  },
+  {
+    key: "follow_ups_due",
+    label: "Follow-ups due",
+    hint: "Completed interventions awaiting reassessment",
+    href: "/follow-ups",
+    icon: "follow-up",
+  },
+];
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -158,144 +248,234 @@ export default function DashboardPage() {
     };
   }, [auth.status, router]);
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
+  // The sidebar links to the map section; land on it once content above has loaded.
+  useEffect(() => {
+    if (loadingSummary || loadingFarmMap || window.location.hash !== "#farm-map") {
+      return;
+    }
+    document.getElementById("farm-map")?.scrollIntoView({ block: "start" });
+  }, [loadingSummary, loadingFarmMap]);
+
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="gov-button gov-button-primary"
-        >
-          Reload
-        </button>
-      </main>
-    );
-  }
-
-  const action = summary?.action_needed;
+  const isAdmin = auth.user.role === "ADMIN";
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Dashboard</h1>
-        <p className="gov-page-description">
-          Operational overview of sugarcane pest cases and field activities.
-        </p>
-      </header>
+      <PageHeader
+        title="Dashboard"
+        description={
+          isAdmin
+            ? "Office-wide overview of sugarcane pest cases and field operations."
+            : "Overview of the pest cases and field work within your assignments."
+        }
+        actions={
+          <Link href="/pest-cases#report-case" className="gov-button gov-button-primary">
+            <Icon name="plus" size={16} />
+            Report pest case
+          </Link>
+        }
+      />
+
       <section aria-labelledby="operational-summary-heading">
-        <h2 id="operational-summary-heading" className="gov-section-title gov-section-heading">
+        <h2 id="operational-summary-heading" className="sr-only">
           Operational summary
         </h2>
         {loadingSummary ? (
-          <p role="status" className="gov-empty-state">Loading operational summary...</p>
+          <p role="status" className="gov-loading-state gov-loading-state--tall">
+            Loading operational summary...
+          </p>
         ) : summaryError ? (
           <p role="alert" className="gov-alert gov-alert-error">{summaryError}</p>
         ) : summary ? (
           <>
             <dl className="gov-summary-grid">
               {[
-                { label: "Farmers", value: summary.totals.farmers, description: "Registered" },
-                { label: "Farms", value: summary.totals.farms, description: "Registered" },
-                { label: "Pest Cases", value: summary.totals.pest_cases, description: "Total recorded" },
-                { label: "Closed Cases", value: summary.by_status.CLOSED, description: "Completed" },
+                { label: "Farmers", value: summary.totals.farmers, description: "Registered", icon: "farmers" as const },
+                { label: "Farms", value: summary.totals.farms, description: "Registered", icon: "farm" as const },
+                { label: "Pest cases", value: summary.totals.pest_cases, description: "Total recorded", icon: "pest" as const },
+                { label: "Closed cases", value: summary.by_status.CLOSED, description: "Completed", icon: "check-circle" as const },
               ].map((item) => (
                 <div key={item.label} className="gov-stat">
-                  <dt className="gov-stat-label">{item.label}</dt>
+                  <div className="gov-stat-head">
+                    <dt className="gov-stat-label">{item.label}</dt>
+                    <span className="gov-stat-icon" aria-hidden="true">
+                      <Icon name={item.icon} size={18} />
+                    </span>
+                  </div>
                   <dd className="gov-stat-value">{item.value}</dd>
                   <dd className="gov-stat-note">{item.description}</dd>
                 </div>
               ))}
             </dl>
+
+            <section className="gov-dashboard-section" aria-labelledby="attention-heading">
+              <div className="gov-section-bar">
+                <div>
+                  <h2 id="attention-heading" className="gov-section-title">
+                    Requires attention
+                  </h2>
+                  <p className="gov-section-description">
+                    Work waiting on the next workflow step.
+                  </p>
+                </div>
+              </div>
+              <ul className="gov-attention-grid">
+                {ATTENTION_ITEMS.map((item) => {
+                  const count = summary.action_needed[item.key];
+                  const tone = count > 0 ? item.tone : "clear";
+                  return (
+                    <li key={item.key}>
+                      <Link href={item.href} className={`gov-attention-card gov-attention-card--${tone}`}>
+                        <span className="gov-attention-status">
+                          <Icon
+                            name={tone === "clear" ? "check-circle" : tone === "danger" ? "alert-triangle" : "clock"}
+                            size={14}
+                          />
+                          {tone === "clear" ? "None pending" : tone === "danger" ? "Overdue" : "Pending"}
+                        </span>
+                        <span className="gov-attention-title">{item.label}</span>
+                        <span className="gov-attention-count">{count}</span>
+                        <span className="gov-attention-text">{item.description}</span>
+                        <span className="gov-attention-link">
+                          {item.action}
+                          <Icon name="arrow-right" size={14} />
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+
+            <section className="gov-card gov-dashboard-section" aria-labelledby="workflow-heading">
+              <div className="gov-card-header">
+                <div>
+                  <h2 id="workflow-heading" className="gov-card-header-title">
+                    Cases by workflow stage
+                  </h2>
+                  <p className="gov-card-header-meta">
+                    {summary.totals.pest_cases} {summary.totals.pest_cases === 1 ? "case" : "cases"} recorded.
+                    Select a status to open the related records.
+                  </p>
+                </div>
+              </div>
+              <div className="gov-pipeline">
+                {PIPELINE.map((group, index) => (
+                  <div key={group.title} className="gov-pipeline-group">
+                    <h3 className="gov-pipeline-title">
+                      <span className="gov-pipeline-step" aria-hidden="true">{index + 1}</span>
+                      {group.title}
+                    </h3>
+                    <ul className="gov-pipeline-list">
+                      {group.items.map((item) => {
+                        const count = summary.by_status[item.status];
+                        return (
+                          <li key={item.status}>
+                            <Link href={item.href} className="gov-pipeline-row">
+                              <span className={workflowBadgeClass(item.status)}>
+                                {workflowLabel(item.status)}
+                              </span>
+                              <span
+                                className={`gov-pipeline-count${count === 0 ? " gov-pipeline-count--zero" : ""}`}
+                              >
+                                {count}
+                              </span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <div className="gov-dashboard-grid">
-              <section className="gov-card gov-section" aria-labelledby="workflow-heading">
-                <h2 id="workflow-heading" className="gov-card-header">Workflow Status</h2>
-                <ul className="gov-status-grid">
-                  {WORKFLOW_ITEMS.map((item) => (
-                    <li key={item.status}>
-                      <Link href={item.href} className="gov-status-row">
-                        <span className={workflowBadgeClass(item.status)}>{item.label}</span>
-                        <strong>{summary.by_status[item.status]}</strong>
+              <section className="gov-card gov-section" aria-labelledby="activity-heading">
+                <div className="gov-card-header">
+                  <div>
+                    <h2 id="activity-heading" className="gov-card-header-title">
+                      Recent case activity
+                    </h2>
+                    <p className="gov-card-header-meta">Most recently updated pest cases.</p>
+                  </div>
+                  <Link href="/pest-cases" className="gov-activity-link">
+                    All pest cases
+                  </Link>
+                </div>
+                {summary.recent_cases.length === 0 ? (
+                  <div className="gov-card-body">
+                    <p role="status" className="gov-empty-state">
+                      No pest case activity to show yet.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="gov-activity-list">
+                    {summary.recent_cases.map((entry) => (
+                      <li key={entry.id} className="gov-activity-item">
+                        <div>
+                          <p className="gov-activity-reference">{entry.pest_name}</p>
+                          <p className="gov-activity-meta">
+                            Case #{entry.id} · Updated {formatDisplayDate(entry.updated_at ?? null)}
+                          </p>
+                        </div>
+                        <div className="gov-activity-actions">
+                          <span className={workflowBadgeClass(entry.status)}>
+                            {workflowLabel(entry.status)}
+                          </span>
+                          <Link
+                            href={`/pest-cases/${entry.id}`}
+                            className="gov-button gov-button-secondary gov-button-compact"
+                          >
+                            <Icon name="history" size={15} />
+                            Case record<span className="sr-only"> for case #{entry.id}</span>
+                          </Link>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="gov-card gov-section" aria-labelledby="in-progress-heading">
+                <div className="gov-card-header">
+                  <div>
+                    <h2 id="in-progress-heading" className="gov-card-header-title">
+                      Field work in progress
+                    </h2>
+                    <p className="gov-card-header-meta">Scheduled and ongoing field activities.</p>
+                  </div>
+                </div>
+                <ul className="gov-progress-list">
+                  {IN_PROGRESS_ITEMS.map((item) => (
+                    <li key={item.key}>
+                      <Link href={item.href} className="gov-progress-row">
+                        <span className="gov-progress-label">
+                          <Icon name={item.icon} size={18} />
+                          <span>
+                            {item.label}
+                            <span className="gov-progress-hint">{item.hint}</span>
+                          </span>
+                        </span>
+                        <span className="gov-progress-count">{summary.action_needed[item.key]}</span>
                       </Link>
                     </li>
                   ))}
                 </ul>
               </section>
-              <section className="gov-card gov-section" aria-labelledby="attention-heading">
-                <h2 id="attention-heading" className="gov-card-header">Requires Attention</h2>
-                <dl className="gov-attention-list">
-                  {ATTENTION_ITEMS.map((item) => (
-                    <div
-                      key={item.key}
-                      className={`gov-attention-row${summary.action_needed[item.key] > 0 ? ` gov-attention-${item.accent}` : ""}`}
-                    >
-                      <dt>
-                        {item.label}
-                        {"description" in item && (
-                          <span className="gov-attention-description">{item.description}</span>
-                        )}
-                      </dt>
-                      <dd>{summary.action_needed[item.key]}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </section>
             </div>
-            <section className="gov-card gov-section" aria-labelledby="activity-heading">
-              <h2 id="activity-heading" className="gov-card-header">Recent Activity</h2>
-              {summary.recent_cases.length === 0 ? (
-                <p role="status" className="gov-empty-state">No pest case records available.</p>
-              ) : (
-                <ul className="gov-activity-list">
-                  {summary.recent_cases.map((entry) => (
-                    <li key={entry.id} className="gov-activity-item">
-                      <div>
-                        <p className="gov-activity-reference">#{entry.id} — {entry.pest_name}</p>
-                        <p className="gov-activity-meta">Updated {formatDisplayDate(entry.updated_at ?? null)}</p>
-                      </div>
-                      <div className="gov-activity-actions">
-                        <span className={workflowBadgeClass(entry.status)}>
-                          {WORKFLOW_ITEMS.find((item) => item.status === entry.status)?.label ?? entry.status}
-                        </span>
-                        <Link href={`/pest-cases/${entry.id}`} className="gov-activity-link">
-                          Timeline<span className="sr-only"> for case #{entry.id}</span>
-                        </Link>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {action && (
-                <p className="gov-dashboard-note">
-                  Follow-ups due: {action.follow_ups_due} · In progress:{" "}
-                  {action.interventions_in_progress} · Scheduled inspections:{" "}
-                  {action.inspections_scheduled_awaiting_validation}
-                </p>
-              )}
-            </section>
           </>
         ) : null}
       </section>
-      <section className="gov-card gov-section gov-map-section" aria-labelledby="farm-map-heading">
+
+      <section
+        id="farm-map"
+        className="gov-card gov-section gov-map-section"
+        aria-labelledby="farm-map-heading"
+      >
         <div className="gov-record-toolbar gov-map-heading-row">
           <div>
             <h2 id="farm-map-heading" className="gov-section-title">Farm Monitoring Map</h2>
@@ -309,11 +489,16 @@ export default function DashboardPage() {
             onClick={() => void loadFarmMap()}
             disabled={loadingFarmMap}
           >
+            <Icon name="refresh" size={15} />
             {loadingFarmMap ? "Loading..." : "Refresh map"}
           </button>
         </div>
+        <p className="gov-callout gov-map-disclaimer">
+          Farm locations shown on this map are approximate operational reference points
+          and do not represent surveyed property boundaries or establish land ownership.
+        </p>
         {loadingFarmMap && farmMap === null ? (
-          <div className="gov-monitoring-map-message" role="status">
+          <div className="gov-monitoring-map-message gov-map-loading" role="status">
             Loading farm monitoring data...
           </div>
         ) : farmMapError ? (
@@ -329,12 +514,12 @@ export default function DashboardPage() {
           </div>
         ) : farmMap ? (
           <>
-            <dl className="gov-summary-grid gov-map-summary-grid">
+            <dl className="gov-summary-grid gov-summary-grid--compact gov-map-summary-grid">
               {[
-                { label: "Mapped Farms", value: farmMap.summary.mapped_farms, description: "Farm count" },
-                { label: "Unmapped Farms", value: farmMap.summary.unmapped_farms, description: "Farm count" },
-                { label: "Active Cases", value: farmMap.summary.active_cases, description: "Case count" },
-                { label: "Needs Attention", value: farmMap.summary.needs_attention_cases, description: "Case count" },
+                { label: "Mapped farms", value: farmMap.summary.mapped_farms, description: "With an approximate location" },
+                { label: "Unmapped farms", value: farmMap.summary.unmapped_farms, description: "No location recorded" },
+                { label: "Active cases", value: farmMap.summary.active_cases, description: "Not closed or ruled out" },
+                { label: "Needs attention", value: farmMap.summary.needs_attention_cases, description: "Waiting on the next action" },
               ].map((item) => (
                 <div key={item.label} className="gov-stat">
                   <dt className="gov-stat-label">{item.label}</dt>

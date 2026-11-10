@@ -6,6 +6,13 @@ import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
 import FarmLocationMap from "@/components/farm-location-map";
+import { Icon } from "@/components/icons";
+import {
+  PageHeader,
+  RequiredLegend,
+  SessionNotice,
+  useRevealOnChange,
+} from "@/components/ui";
 import {
   FarmersRequestError,
   listFarmers,
@@ -70,10 +77,12 @@ function FarmLocationField({
     <section className="gov-location-field" aria-labelledby={`${mapKey}-title`}>
       <div>
         <h3 id={`${mapKey}-title`} className="gov-location-title">
-          Approximate Farm Location
+          <Icon name="map-pin" size={18} />
+          Approximate Farm Location <span className="gov-label-optional">(optional)</span>
         </h3>
         <p className="gov-field-help">
-          Select the approximate farm location reported by the farmer.
+          Select the approximate farm location reported by the farmer by clicking the map.
+          The point is an operational reference for monitoring, not a surveyed boundary.
         </p>
       </div>
       <FarmLocationMap
@@ -128,8 +137,10 @@ export default function FarmsPage() {
   const [editLocation, setEditLocation] = useState<EditLocationDraft | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const authenticated = auth.status === "authenticated";
+  const editRef = useRevealOnChange<HTMLElement>(editingId);
 
   useEffect(() => {
     if (auth.status === "unauthenticated") {
@@ -332,49 +343,46 @@ export default function FarmsPage() {
     }
   }
 
-  if (auth.status === "loading") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Checking your session...</p>
-      </main>
-    );
+  if (auth.status !== "authenticated") {
+    return <SessionNotice status={auth.status} />;
   }
 
-  if (auth.status === "unauthenticated") {
-    return (
-      <main className="gov-status-page">
-        <p role="status" className="gov-status-message">Redirecting to sign in...</p>
-      </main>
-    );
-  }
-
-  if (auth.status === "error") {
-    return (
-      <main className="gov-status-page">
-        <h1 className="gov-section-title">Unable to verify your session</h1>
-        <p className="gov-field-help">
-          The authentication service is unavailable. Reload this page to try again.
-        </p>
-      </main>
-    );
-  }
+  // Quick search over the already-loaded (and already authorized) list.
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleFarms =
+    normalizedQuery === ""
+      ? farms
+      : farms.filter((entry) =>
+          [entry.plot_identifier, entry.barangay, entry.farmer.full_name, String(entry.id)].some(
+            (value) => value.toLowerCase().includes(normalizedQuery),
+          ),
+        );
 
   return (
     <main className="gov-page">
-      <header className="gov-page-header">
-        <h1 className="gov-page-title">Farms</h1>
-        <p className="gov-page-description">
-          Manage registered sugarcane farm and plot records.
-        </p>
-        <div className="gov-page-links">
-          <Link href="/pest-cases" className="gov-button gov-button-secondary">
+      <PageHeader
+        title="Farms"
+        description="Manage registered sugarcane farm and plot records, including each farm's approximate location for monitoring."
+        related={[
+          { href: "/farmers", label: "Farmers" },
+          { href: "/dashboard#farm-map", label: "Farm Monitoring Map" },
+        ]}
+        actions={
+          <Link href="/pest-cases#report-case" className="gov-button gov-button-secondary">
+            <Icon name="pest" size={16} />
             Report pest case
           </Link>
-        </div>
-      </header>
+        }
+      />
 
-        <section aria-label="Add farm" className="gov-card gov-record-section">
-          <h2 className="gov-record-title">Add farm</h2>
+        <section aria-labelledby="add-farm-heading" className="gov-card gov-record-section">
+          <h2 id="add-farm-heading" className="gov-record-title">
+            Add farm
+          </h2>
+          <p className="gov-record-intro">
+            Record a farm or plot for a registered farmer. Ownership is fixed to the selected
+            farmer once the farm is saved.
+          </p>
           {farmers.length === 0 && !loadingList ? (
             <p role="status" className="gov-empty-state">
               Add a farmer first before recording a farm.{" "}
@@ -384,6 +392,7 @@ export default function FarmsPage() {
             </p>
           ) : (
             <form onSubmit={handleCreate} className="gov-form gov-form-grid">
+              <RequiredLegend />
               <div className="gov-field">
                 <label htmlFor="farmer_id" className="gov-label">
                   Farmer <span className="gov-required" aria-hidden="true">*</span>
@@ -462,6 +471,7 @@ export default function FarmsPage() {
                   disabled={creating}
                   className="gov-button gov-button-primary"
                 >
+                  <Icon name="plus" size={16} />
                   {creating ? "Adding..." : "Add farm"}
                 </button>
               </div>
@@ -472,24 +482,41 @@ export default function FarmsPage() {
               {formError}
             </p>
           )}
-          {formNotice && (
+          {formNotice && formNotice.endsWith(" was added.") && (
             <p role="status" className="gov-alert gov-alert-success mt-4">
               {formNotice}
             </p>
           )}
         </section>
 
-        <section aria-label="Farm records" className="gov-card gov-record-section">
+        <section aria-labelledby="farm-records-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
             <div>
-              <h2 className="gov-record-title">Farm records</h2>
+              <h2 id="farm-records-heading" className="gov-record-title">
+                Farm records
+              </h2>
               {!loadingList && listError === null && (
                 <p className="gov-record-meta">
-                  {farms.length} {farms.length === 1 ? "farm" : "farms"} shown
+                  {normalizedQuery === ""
+                    ? `${farms.length} ${farms.length === 1 ? "farm" : "farms"} shown`
+                    : `${visibleFarms.length} of ${farms.length} shown`}
                 </p>
               )}
             </div>
             <div className="gov-record-controls">
+              <label htmlFor="farm_search" className="gov-label">
+                Search
+              </label>
+              <input
+                id="farm_search"
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                maxLength={120}
+                autoComplete="off"
+                placeholder="Plot, barangay, farmer, or ID"
+                className="gov-input gov-input-search gov-list-search"
+              />
               <label htmlFor="filter_farmer" className="gov-label">
                 Farmer
               </label>
@@ -516,12 +543,18 @@ export default function FarmsPage() {
                 disabled={loadingList}
                 className="gov-button gov-button-secondary gov-button-compact"
               >
+                <Icon name="refresh" size={15} />
                 {loadingList ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
+          {formNotice && formNotice.endsWith(" was updated.") && (
+            <p role="status" className="gov-alert gov-alert-success">
+              {formNotice}
+            </p>
+          )}
           {loadingList ? (
-            <p role="status" className="gov-empty-state">
+            <p role="status" className="gov-loading-state">
               Loading farms...
             </p>
           ) : listError ? (
@@ -532,6 +565,17 @@ export default function FarmsPage() {
             <p role="status" className="gov-empty-state">
               No farm records available. Add the first farm above.
             </p>
+          ) : visibleFarms.length === 0 ? (
+            <p role="status" className="gov-empty-state">
+              No farms match “{query.trim()}”.{" "}
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="gov-button gov-button-ghost gov-button-compact"
+              >
+                Clear search
+              </button>
+            </p>
           ) : (
             <div className="gov-table-wrap mt-4">
               <table className="gov-table min-w-[720px]">
@@ -541,14 +585,20 @@ export default function FarmsPage() {
                     <th scope="col">Barangay</th>
                     <th scope="col" className="gov-cell-num">Area (ha)</th>
                     <th scope="col">Farmer</th>
-                    <th scope="col">GIS status</th>
+                    <th scope="col">Approximate location</th>
                     <th scope="col" className="gov-col-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {farms.map((entry) => (
-                    <tr key={entry.id}>
-                      <td className="gov-cell-primary">{entry.plot_identifier}</td>
+                  {visibleFarms.map((entry) => (
+                    <tr
+                      key={entry.id}
+                      className={editingId === entry.id ? "gov-row-selected" : undefined}
+                    >
+                      <td>
+                        <span className="gov-cell-primary">{entry.plot_identifier}</span>
+                        <span className="gov-cell-meta">Farm ID {entry.id}</span>
+                      </td>
                       <td>{entry.barangay}</td>
                       <td className="gov-cell-num">{entry.area_hectares.toFixed(2)}</td>
                       <td>{entry.farmer.full_name}</td>
@@ -557,7 +607,7 @@ export default function FarmsPage() {
                           <>
                             <span className="gov-status-badge gov-tone-success">Mapped</span>
                             <span className="gov-cell-meta">
-                              {entry.latitude.toFixed(6)}, {entry.longitude.toFixed(6)}
+                              Approx. {entry.latitude.toFixed(6)}, {entry.longitude.toFixed(6)}
                             </span>
                           </>
                         ) : (
@@ -586,12 +636,14 @@ export default function FarmsPage() {
                             className="gov-button gov-button-secondary gov-button-compact"
                           >
                             {editingId === entry.id ? "Cancel" : "Edit"}
+                            <span className="sr-only"> {entry.plot_identifier}</span>
                           </button>
                           <Link
                             href={`/pest-cases?farm_id=${entry.id}`}
                             className="gov-button gov-button-secondary gov-button-compact"
                           >
                             Report case
+                            <span className="sr-only"> for {entry.plot_identifier}</span>
                           </Link>
                         </div>
                       </td>
@@ -614,17 +666,24 @@ export default function FarmsPage() {
                 ? editLocation.coordinates
                 : coordinatesFromFarm(target);
             return (
-              <section aria-label="Edit farm" className="gov-card gov-record-section">
-                <h2 className="gov-record-title">
-                  Edit farm: {target.plot_identifier}
+              <section
+                ref={editRef}
+                tabIndex={-1}
+                aria-labelledby="edit-farm-heading"
+                className="gov-card gov-record-section gov-record-section--selected"
+              >
+                <p className="gov-record-eyebrow">Edit farm · Farm ID {target.id}</p>
+                <h2 id="edit-farm-heading" className="gov-record-title">
+                  {target.plot_identifier}
                 </h2>
-                <p className="gov-field-help">
+                <p className="gov-record-intro">
                   Farmer: {target.farmer.full_name} (farm ownership cannot be changed here)
                 </p>
                 <form
                   onSubmit={(event) => void handleEdit(event, target)}
                   className="gov-form gov-form-grid"
                 >
+                  <RequiredLegend />
                   <div className="gov-field">
                     <label htmlFor="edit_plot_identifier" className="gov-label">
                       Farm/plot identifier <span className="gov-required" aria-hidden="true">*</span>
@@ -690,6 +749,18 @@ export default function FarmsPage() {
                     }
                   />
                   <div className="gov-form-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditLocation(null);
+                        setEditError(null);
+                      }}
+                      disabled={savingEdit}
+                      className="gov-button gov-button-secondary"
+                    >
+                      Cancel
+                    </button>
                     <button
                       type="submit"
                       disabled={savingEdit}

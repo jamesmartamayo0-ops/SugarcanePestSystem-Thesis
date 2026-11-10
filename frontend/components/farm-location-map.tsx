@@ -10,7 +10,7 @@ const FarmLocationMapClient = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="gov-map-message" role="status">
+      <div className="gov-map-message gov-map-loading" role="status">
         Loading map...
       </div>
     ),

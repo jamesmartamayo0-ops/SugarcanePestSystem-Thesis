@@ -1,32 +1,33 @@
 import Link from "next/link";
 
+import { AuthLayout } from "@/components/auth-layout";
+import { Icon } from "@/components/icons";
 import SystemStatus from "@/components/system-status";
-import { OFFICE_NAME, SYSTEM_NAME } from "@/lib/branding";
 
 export default function Home() {
   return (
-    <main className="gov-login">
-      <div className="gov-card gov-login-card">
-        <header className="gov-login-brand">
-          <div className="gov-logo-slot gov-logo-slot--login" aria-hidden="true" />
-          <p className="gov-login-office">{OFFICE_NAME}</p>
-        </header>
-
-        <h1 className="gov-login-title">{SYSTEM_NAME}</h1>
-        <p className="gov-login-lead">
-          Record and track sugarcane pest cases from field validation through
-          intervention and follow-up.
+    <AuthLayout>
+      <div className="gov-auth-card">
+        <p className="gov-auth-eyebrow">Internal system</p>
+        <h2 className="gov-auth-title">Staff access</h2>
+        <p className="gov-auth-text">
+          Record and track sugarcane pest cases from field validation through intervention
+          and follow-up.
         </p>
 
-        <div className="gov-login-body">
+        <div className="gov-auth-pending">
           <Link href="/login" className="gov-button gov-button-primary gov-button-block">
             Sign in
+            <Icon name="arrow-right" size={18} />
           </Link>
           <SystemStatus />
         </div>
 
-        <p className="gov-login-footnote">Authorized personnel only.</p>
+        <p className="gov-auth-note">
+          <Icon name="lock" size={16} />
+          Authorized personnel only.
+        </p>
       </div>
-    </main>
+    </AuthLayout>
   );
 }

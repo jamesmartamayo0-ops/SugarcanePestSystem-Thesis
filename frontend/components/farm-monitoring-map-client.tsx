@@ -113,6 +113,9 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                     </>
                   )}
                 </dl>
+                <p className="gov-map-popup-note">
+                  Approximate farm location for monitoring reference only.
+                </p>
                 {farm.case && (
                   <div className="gov-map-popup-actions">
                     <a href={`/pest-cases/${farm.case.id}#case-summary`}>View case</a>
