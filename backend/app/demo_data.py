@@ -1,7 +1,8 @@
 """Deterministic synthetic demo dataset for the thesis demo.
 
-All names are clearly fictional. Repeated execution is safe: if the demo
-marker farmer already exists, seeding is refused without changes.
+All names are clearly fictional. Seeding requires DB_NAME to equal
+DEMO_SEED_DATABASE (default sugarcane_pest_test). Repeated execution is safe:
+if the demo marker farmer already exists, seeding is refused without changes.
 """
 
 import os
@@ -18,6 +19,7 @@ ALLOWED_DATABASE = "sugarcane_pest_test"
 FORBIDDEN_DATABASE = "sugarcane_pest_db"
 DEMO_FARMER_MARKER = "Demo Farmer 01 (Synthetic)"
 
+
 try:
     _MANILA_TZ = ZoneInfo("Asia/Manila")
 except Exception:
@@ -28,20 +30,36 @@ def manila_today() -> date:
     return datetime.now(_MANILA_TZ).date()
 
 
+def demo_database_name() -> str:
+    return os.environ.get("DEMO_SEED_DATABASE", ALLOWED_DATABASE).strip()
+
+
 def _require_demo_database() -> None:
     configured = os.environ.get("DB_NAME", "")
-    if configured != ALLOWED_DATABASE:
+    allowed = demo_database_name()
+    if not allowed or configured != allowed:
         raise RuntimeError(
-            f"Refusing to seed: DB_NAME must be {ALLOWED_DATABASE} (got {configured!r})."
+            f"Refusing to seed: DB_NAME must equal DEMO_SEED_DATABASE ({allowed!r})."
         )
 
 
 def _verify_live_database() -> None:
+    allowed = demo_database_name()
     name = db.session.execute(text("SELECT current_database()")).scalar_one()
-    if name != ALLOWED_DATABASE:
+    if name != allowed:
         raise RuntimeError(f"Refusing to seed: live database is {name!r}.")
     if name == FORBIDDEN_DATABASE:
         raise RuntimeError("Refusing to seed the thesis database.")
+
+
+def _demo_tech_password() -> str:
+    password = os.environ.get("DEMO_TECH_PASSWORD", "")
+    if not password:
+        raise RuntimeError(
+            "Refusing to create a demo technician without DEMO_TECH_PASSWORD. "
+            "Create the technician through the Admin UI instead."
+        )
+    return password
 
 
 def demo_already_seeded() -> bool:
@@ -62,8 +80,13 @@ def _get_or_create_demo_users():
         .limit(1)
     )
     if tech is None:
-        tech = User(username="demo.tech", full_name="Demo Technician (Synthetic)", role="TECHNICIAN", is_active=True)
-        tech.set_password("Demo-Technician-Password-123!")
+        tech = User(
+            username="demo.tech",
+            full_name="Demo Technician (Synthetic)",
+            role="TECHNICIAN",
+            is_active=True,
+        )
+        tech.set_password(_demo_tech_password())
         db.session.add(tech)
         db.session.flush()
     return admin, tech

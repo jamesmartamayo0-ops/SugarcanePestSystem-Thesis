@@ -1,4 +1,3 @@
-import uuid
 from datetime import date
 from pathlib import Path
 
@@ -7,6 +6,7 @@ from sqlalchemy import func, or_, select, text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
+from app import evidence
 from app.auth import auth_error, login_required, roles_required
 from app.extensions import db
 from app.models import (
@@ -563,9 +563,7 @@ def _detect_evidence_type(data: bytes) -> tuple[str, str] | None:
 
 
 def _evidence_directory() -> Path:
-    directory = Path(current_app.config["EVIDENCE_UPLOAD_DIR"])
-    directory.mkdir(parents=True, exist_ok=True)
-    return directory
+    return evidence.local_directory()
 
 
 def _remove_saved_evidence(files: list[Path]) -> None:
@@ -594,6 +592,9 @@ def get_case_evidence_photo(case_id: int, photo_id: int):
 @login_required
 @roles_required("ADMIN", "TECHNICIAN")
 def upload_evidence_photos(case_id: int):
+    if evidence.storage_mode() != evidence.LOCAL:
+        return auth_error("Direct evidence upload is required.", 409)
+
     if request.content_length is not None and request.content_length > (
         _EVIDENCE_MAX_BYTES * _EVIDENCE_MAX_PHOTOS
     ):
@@ -639,10 +640,10 @@ def upload_evidence_photos(case_id: int):
         detected = _detect_evidence_type(data)
         if detected is None or detected[0] not in _EVIDENCE_TYPES:
             return auth_error("Evidence photos must be JPEG, PNG, or WebP.", 400)
-        content_type, extension = detected
+        content_type = detected[0]
         original_name = Path(item.filename or "photo").name[:255] or "photo"
         prepared.append(
-            (f"{uuid.uuid4().hex}{extension}", original_name, content_type, data)
+            (evidence.new_local_name(content_type), original_name, content_type, data)
         )
 
     saved_paths: list[Path] = []
@@ -690,6 +691,9 @@ def upload_evidence_photos(case_id: int):
 @login_required
 @roles_required("ADMIN", "TECHNICIAN")
 def get_evidence_photo(case_id: int, photo_id: int):
+    if evidence.storage_mode() != evidence.LOCAL:
+        return auth_error("Direct evidence download is required.", 409)
+
     try:
         case = get_pest_case_by_id(case_id)
     except SQLAlchemyError:
@@ -708,7 +712,7 @@ def get_evidence_photo(case_id: int, photo_id: int):
     if photo is None:
         return auth_error("Evidence photo not found.", 404)
 
-    path = Path(current_app.config["EVIDENCE_UPLOAD_DIR"]) / photo.stored_name
+    path = evidence.local_path(photo.stored_name)
     if not path.is_file():
         return auth_error("Evidence photo not found.", 404)
     return send_file(
@@ -717,6 +721,235 @@ def get_evidence_photo(case_id: int, photo_id: int):
         as_attachment=False,
         download_name=photo.original_filename,
         max_age=0,
+    )
+
+
+@pest_cases_bp.get("/<int:case_id>/evidence-photos/config")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def evidence_photo_config(case_id: int):
+    try:
+        case = get_pest_case_by_id(case_id)
+        photos = list_case_evidence_photos(case_id) if case is not None else []
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence configuration lookup failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if case is None:
+        return auth_error("Pest case not found.", 404)
+
+    return jsonify(
+        {
+            "data": {
+                "storage": evidence.storage_mode(),
+                "max_photos": evidence.MAX_PHOTOS,
+                "max_bytes": evidence.MAX_BYTES,
+                "content_types": list(evidence.CONTENT_TYPES),
+                "remaining": max(0, evidence.MAX_PHOTOS - len(photos)),
+            },
+            "message": "Evidence configuration retrieved.",
+        }
+    )
+
+
+@pest_cases_bp.post("/<int:case_id>/evidence-photos/upload-authorize")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def authorize_evidence_upload(case_id: int):
+    if evidence.storage_mode() != evidence.BLOB:
+        return auth_error("Direct evidence upload is not enabled.", 409)
+    if request.content_length is not None and request.content_length > 4096:
+        return auth_error("Invalid evidence upload request.", 400)
+    if request.data and not request.is_json:
+        return auth_error("Invalid evidence upload request.", 400)
+
+    try:
+        case = get_pest_case_by_id(case_id)
+        photos = list_case_evidence_photos(case_id) if case is not None else []
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence upload authorization lookup failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if case is None:
+        return auth_error("Pest case not found.", 404)
+    if case.status != PestCaseStatus.REPORTED.value:
+        return auth_error(
+            "Evidence photos can only be added while the case is Reported.", 409
+        )
+    if len(photos) >= evidence.MAX_PHOTOS:
+        return auth_error("Upload at most 3 evidence photos per case.", 400)
+
+    return jsonify(
+        {
+            "data": {
+                "prefix": f"ev/{case.id}/",
+                "max_bytes": evidence.MAX_BYTES,
+                "content_types": list(evidence.CONTENT_TYPES),
+                "remaining": evidence.MAX_PHOTOS - len(photos),
+            },
+            "message": "Evidence upload authorized.",
+        }
+    )
+
+
+def _delete_blob_evidence(stored_names: list[str]) -> None:
+    for stored_name in stored_names:
+        evidence.blob_delete(stored_name)
+
+
+@pest_cases_bp.post("/<int:case_id>/evidence-photos/finalize")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def finalize_evidence_photos(case_id: int):
+    if evidence.storage_mode() != evidence.BLOB:
+        return auth_error("Direct evidence upload is not enabled.", 409)
+    if not request.is_json or (
+        request.content_length is not None and request.content_length > 16384
+    ):
+        return auth_error("Invalid evidence photo data.", 400)
+
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or set(payload) != {"photos"}:
+        return auth_error("Invalid evidence photo data.", 400)
+    uploaded = payload["photos"]
+    if not isinstance(uploaded, list) or not 1 <= len(uploaded) <= evidence.MAX_PHOTOS:
+        return auth_error("Upload at most 3 evidence photos per case.", 400)
+
+    try:
+        case = get_pest_case_by_id(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence finalization case lookup failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if case is None:
+        return auth_error("Pest case not found.", 404)
+    if case.status != PestCaseStatus.REPORTED.value:
+        return auth_error(
+            "Evidence photos can only be added while the case is Reported.", 409
+        )
+
+    prepared: list[tuple[str, str, str]] = []
+    for item in uploaded:
+        if not isinstance(item, dict) or set(item) != {"pathname", "original_filename"}:
+            return auth_error("Invalid evidence photo data.", 400)
+        pathname = item["pathname"]
+        original_filename = item["original_filename"]
+        if not isinstance(pathname, str) or not isinstance(original_filename, str):
+            return auth_error("Invalid evidence photo data.", 400)
+        try:
+            _, extension = evidence.parse_blob_name(pathname, case.id)
+        except evidence.EvidenceObjectInvalid:
+            return auth_error("Invalid evidence photo reference.", 400)
+        expected_type = evidence.content_type_for_extension(extension)
+        if expected_type is None:
+            return auth_error("Invalid evidence photo reference.", 400)
+        original_name = Path(original_filename).name[:255] or "photo"
+        prepared.append((pathname, original_name, expected_type))
+
+    if len({pathname for pathname, _, _ in prepared}) != len(prepared):
+        return auth_error("Invalid evidence photo reference.", 400)
+
+    stored_names = [pathname for pathname, _, _ in prepared]
+    try:
+        acquire_pest_case_transition_lock(case_id)
+        existing = list_case_evidence_photos(case_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence finalization count check failed.")
+        _delete_blob_evidence(stored_names)
+        return auth_error("Evidence photo service unavailable.", 503)
+    if len(existing) + len(prepared) > evidence.MAX_PHOTOS:
+        db.session.rollback()
+        _delete_blob_evidence(stored_names)
+        return auth_error("Upload at most 3 evidence photos per case.", 400)
+    recorded_names = {photo.stored_name for photo in existing}
+    if any(stored_name in recorded_names for stored_name in stored_names):
+        # Never delete an object that is already referenced by an evidence row.
+        db.session.rollback()
+        return auth_error("Evidence photo is already recorded.", 409)
+
+    verified: list[tuple[str, str, str, int]] = []
+    try:
+        for pathname, original_name, expected_type in prepared:
+            head = evidence.blob_head(pathname)
+            size = getattr(head, "size", None)
+            content_type = getattr(head, "content_type", None)
+            if type(size) is not int or not 0 < size <= evidence.MAX_BYTES:
+                raise evidence.EvidenceObjectInvalid("Invalid evidence photo size.")
+            if content_type != expected_type:
+                raise evidence.EvidenceObjectInvalid("Invalid evidence photo type.")
+            data, _metadata = evidence.blob_get(pathname)
+            if not isinstance(data, (bytes, bytearray)) or len(data) != size:
+                raise evidence.EvidenceObjectInvalid("Invalid evidence photo content.")
+            if len(data) > evidence.MAX_BYTES:
+                raise evidence.EvidenceObjectInvalid("Invalid evidence photo size.")
+            detected = _detect_evidence_type(bytes(data))
+            if detected is None or detected[0] != expected_type:
+                raise evidence.EvidenceObjectInvalid("Invalid evidence photo content.")
+            verified.append((pathname, original_name, expected_type, size))
+    except evidence.EvidenceObjectInvalid as exc:
+        current_app.logger.warning("Evidence finalization rejected: %s", exc)
+        _delete_blob_evidence(stored_names)
+        return auth_error(str(exc), 400)
+    except Exception:
+        current_app.logger.error("Evidence object verification failed.")
+        _delete_blob_evidence(stored_names)
+        return auth_error("Evidence photo service unavailable.", 503)
+
+    try:
+        photos = [
+            PestCaseEvidencePhoto(
+                pest_case_id=case.id,
+                stored_name=pathname,
+                original_filename=original_name,
+                content_type=expected_type,
+                byte_size=size,
+                uploaded_by_user_id=g.current_user.id,
+            )
+            for pathname, original_name, expected_type, size in verified
+        ]
+        persist_evidence_photos(photos)
+    except SQLAlchemyError:
+        db.session.rollback()
+        _delete_blob_evidence(stored_names)
+        current_app.logger.error("Evidence photo metadata save failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+
+    return (
+        jsonify(
+            {
+                "data": {"pest_case": _pest_case_detail(case)},
+                "message": "Evidence photos uploaded.",
+            }
+        ),
+        201,
+    )
+
+
+@pest_cases_bp.get("/<int:case_id>/evidence-photos/<int:photo_id>/authorize-download")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def authorize_evidence_download(case_id: int, photo_id: int):
+    try:
+        case = get_pest_case_by_id(case_id)
+        photo = get_case_evidence_photo(case_id, photo_id)
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Evidence download authorization lookup failed.")
+        return auth_error("Evidence photo service unavailable.", 503)
+    if case is None or photo is None:
+        return auth_error("Evidence photo not found.", 404)
+
+    return jsonify(
+        {
+            "data": {
+                "storage": evidence.storage_mode(),
+                "pathname": photo.stored_name,
+                "content_type": photo.content_type,
+                "original_filename": photo.original_filename,
+            },
+            "message": "Evidence download authorized.",
+        }
     )
 
 

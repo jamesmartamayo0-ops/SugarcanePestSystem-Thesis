@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 from flask import Flask
 from sqlalchemy.engine import URL
 
+from app.evidence import validate_storage_mode
+
 
 class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
@@ -92,6 +94,9 @@ def configure_app(app: Flask) -> None:
     app.config["DB_PASSWORD_CONFIGURED"] = password is not None
     app.config["EVIDENCE_UPLOAD_DIR"] = os.getenv("EVIDENCE_UPLOAD_DIR") or str(
         Path(app.instance_path) / "pest-evidence"
+    )
+    app.config["EVIDENCE_STORAGE"] = validate_storage_mode(
+        os.getenv("EVIDENCE_STORAGE")
     )
     app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
         "postgresql+psycopg",

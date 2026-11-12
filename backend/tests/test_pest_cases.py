@@ -1,13 +1,15 @@
 import io
+import json
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from flask import g
 from sqlalchemy.exc import SQLAlchemyError
 
-from app import auth, create_app
-from app.models import Farm, Farmer, PestCase, PestCaseStatus, User
+from app import auth, create_app, evidence
+from app.models import Farm, Farmer, PestCase, PestCaseEvidencePhoto, PestCaseStatus, User
 from app.models.pest_case import (
     normalize_observed_on,
     normalize_pest_name,
@@ -769,3 +771,274 @@ def test_model_relationship_and_constraints():
     assert case.status == "REPORTED"
     with pytest.raises(ValueError):
         case.status = "INSPECTED"
+
+
+class _FakeBlobStore:
+    def __init__(self):
+        self.objects = {}
+        self.sizes = {}
+        self.deleted = []
+
+    def head_blob(self, name):
+        body, content_type = self.objects[name]
+        return SimpleNamespace(
+            size=self.sizes.get(name, len(body)),
+            content_type=content_type,
+        )
+
+    def get_blob(self, name, *, access):
+        assert access == "private"
+        body, content_type = self.objects[name]
+        return SimpleNamespace(
+            body=body,
+            metadata=SimpleNamespace(size=len(body), content_type=content_type),
+        )
+
+    def delete_blob(self, name):
+        self.deleted.append(name)
+        self.objects.pop(name, None)
+
+
+def _install_blob_evidence(monkeypatch, client):
+    client.application.config["EVIDENCE_STORAGE"] = "blob"
+    photo_store = _install_evidence_store(monkeypatch)
+    blob_store = _FakeBlobStore()
+    monkeypatch.setattr(evidence, "_blob_sdk", lambda: blob_store)
+    return photo_store, blob_store
+
+
+def _blob_key(case_id=1, extension="png"):
+    return f"ev/{case_id}/{'a' * 32}.{extension}"
+
+
+def _authorize_upload(client, token, case_id=1):
+    return client.post(
+        f"/api/v1/pest-cases/{case_id}/evidence-photos/upload-authorize",
+        json={},
+        headers=_photo_headers(token),
+    )
+
+
+def _finalize(client, token, photos, case_id=1):
+    return client.post(
+        f"/api/v1/pest-cases/{case_id}/evidence-photos/finalize",
+        json={"photos": photos},
+        headers=_photo_headers(token),
+    )
+
+
+def test_evidence_config_reports_storage_mode(pest_case):
+    client, _, _, _ = pest_case
+    login_technician(client)
+    local = client.get(f"/api/v1/pest-cases/1/evidence-photos/config")
+    assert local.status_code == 200
+    local_data = local.get_json()["data"]
+    assert local_data["storage"] == "local"
+    assert local_data["max_photos"] == 3
+    assert local_data["max_bytes"] == 5 * 1024 * 1024
+
+    client.application.config["EVIDENCE_STORAGE"] = "blob"
+    blob = client.get(f"/api/v1/pest-cases/1/evidence-photos/config")
+    assert blob.status_code == 200
+    assert blob.get_json()["data"]["storage"] == "blob"
+
+
+def test_blob_upload_authorize_finalize_and_private_download(
+    pest_case, monkeypatch
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    key = _blob_key()
+    blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    authorized = _authorize_upload(client, token)
+    assert authorized.status_code == 200
+    assert authorized.get_json()["data"]["prefix"] == "ev/1/"
+
+    finalized = _finalize(
+        client,
+        token,
+        [{"pathname": key, "original_filename": "../evidence.png"}],
+    )
+    assert finalized.status_code == 201
+    assert len(photo_store) == 1
+    photo = photo_store[0]
+    assert photo.stored_name == key
+    assert photo.original_filename == "evidence.png"
+    assert photo.content_type == "image/png"
+    assert photo.byte_size == len(PNG_BYTES)
+
+    download = client.get(f"{PHOTOS(1)}/{photo.id}/authorize-download")
+    assert download.status_code == 200
+    data = download.get_json()["data"]
+    assert data["storage"] == "blob"
+    assert data["pathname"] == key
+    assert "https://" not in json.dumps(download.get_json())
+    assert "blob.vercel-storage.com" not in json.dumps(download.get_json())
+
+    outsider = client.application.test_client()
+    login_technician_two(outsider)
+    assert (
+        outsider.get(f"{PHOTOS(1)}/{photo.id}/authorize-download").status_code
+        == 404
+    )
+
+    admin = client.application.test_client()
+    login_admin(admin)
+    assert admin.get(f"{PHOTOS(1)}/{photo.id}/authorize-download").status_code == 200
+
+
+def test_blob_finalize_is_idempotent_for_recorded_object(
+    pest_case, monkeypatch
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    key = _blob_key()
+    blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+    photo = {"pathname": key, "original_filename": "evidence.png"}
+
+    assert _finalize(client, token, [photo]).status_code == 201
+    assert _finalize(client, token, [photo]).status_code == 409
+    assert len(photo_store) == 1
+    assert key not in blob_store.deleted
+
+
+@pytest.mark.parametrize(
+    ("extension", "head_type", "body", "oversized"),
+    [
+        ("png", "image/png", b"not an image", False),
+        ("png", "image/jpeg", PNG_BYTES, False),
+        ("jpg", "image/png", PNG_BYTES, False),
+        ("png", "image/png", PNG_BYTES, True),
+    ],
+)
+def test_blob_finalize_rejects_invalid_objects(
+    pest_case, monkeypatch, extension, head_type, body, oversized
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    key = _blob_key(extension=extension)
+    blob_store.objects[key] = (body, head_type)
+    if oversized:
+        blob_store.sizes[key] = 5 * 1024 * 1024 + 1
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": key, "original_filename": "evidence.png"}],
+    )
+    assert response.status_code == 400
+    assert photo_store == []
+    assert key in blob_store.deleted
+
+
+def test_blob_finalize_rejects_wrong_case_key(pest_case, monkeypatch):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    key = _blob_key(case_id=2)
+    blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": key, "original_filename": "evidence.png"}],
+    )
+    assert response.status_code == 400
+    assert photo_store == []
+
+
+def test_blob_finalize_rejects_more_than_three(pest_case, monkeypatch):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    for index in range(3):
+        photo_store.append(
+            PestCaseEvidencePhoto(
+                id=index + 1,
+                pest_case_id=1,
+                stored_name=f"ev/1/{'b' * 32}.png",
+                original_filename="existing.png",
+                content_type="image/png",
+                byte_size=len(PNG_BYTES),
+                uploaded_by_user_id=2,
+            )
+        )
+    key = _blob_key()
+    blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    assert _authorize_upload(client, token).status_code == 400
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": key, "original_filename": "evidence.png"}],
+    )
+    assert response.status_code == 400
+    assert len(photo_store) == 3
+    assert key in blob_store.deleted
+
+
+def test_blob_finalize_rejects_wrong_workflow_state(pest_case, monkeypatch):
+    client, store, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    store[1].status = PestCaseStatus.FIELD_VALIDATED.value
+    key = _blob_key()
+    blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": key, "original_filename": "evidence.png"}],
+    )
+    assert response.status_code == 409
+    assert photo_store == []
+
+
+def test_blob_admin_can_finalize_evidence(pest_case, monkeypatch):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    key = _blob_key()
+    blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_admin(client)
+
+    assert _authorize_upload(client, token).status_code == 200
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": key, "original_filename": "evidence.png"}],
+    )
+    assert response.status_code == 201
+    assert len(photo_store) == 1
+
+
+def test_blob_authorization_requires_scope_and_csrf(pest_case, monkeypatch):
+    client, _, _, _ = pest_case
+    _install_blob_evidence(monkeypatch, client)
+    token = login_technician(client)
+
+    assert (
+        client.post(
+            "/api/v1/pest-cases/1/evidence-photos/upload-authorize",
+            json={},
+        ).status_code
+        == 403
+    )
+
+    outsider = client.application.test_client()
+    outsider_token = login_technician_two(outsider)
+    assert _authorize_upload(outsider, outsider_token).status_code == 404
+
+    admin = client.application.test_client()
+    admin_token = login_admin(admin)
+    assert _authorize_upload(admin, admin_token).status_code == 200
+
+
+def test_blob_mode_disables_multipart_evidence_endpoint(pest_case, monkeypatch):
+    client, _, _, _ = pest_case
+    _install_blob_evidence(monkeypatch, client)
+    token = login_technician(client)
+    assert _upload(client, token).status_code == 409

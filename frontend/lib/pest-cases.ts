@@ -1,3 +1,10 @@
+import { upload } from "@vercel/blob/client";
+
+import {
+  evidenceObjectExtension,
+  evidenceObjectKey,
+  isEvidenceObjectKeyForCase,
+} from "@/lib/evidence-object";
 import { authenticatedFetch } from "@/lib/api";
 
 export type PestCaseStatus =
@@ -30,7 +37,7 @@ export type EvidencePhoto = {
 };
 
 export function evidencePhotoUrl(caseId: number, photoId: number): string {
-  return `/api/v1/pest-cases/${caseId}/evidence-photos/${photoId}`;
+  return `/api/evidence/download/${caseId}/${photoId}`;
 }
 
 export type PestCaseFarmRef = {
@@ -454,11 +461,161 @@ export async function submitForInspection(
   );
 }
 
+type EvidenceStorageConfig = {
+  storage: "local" | "blob";
+  max_photos: number;
+  max_bytes: number;
+  content_types: string[];
+  remaining: number;
+};
+
+async function getEvidenceStorageConfig(caseId: number): Promise<EvidenceStorageConfig> {
+  let response: Response;
+  try {
+    response = await authenticatedFetch(
+      `/api/v1/pest-cases/${caseId}/evidence-photos/config`,
+      { cache: "no-store" },
+    );
+  } catch {
+    throw new PestCasesRequestError(
+      "unavailable",
+      "Evidence photo service is unavailable.",
+    );
+  }
+  if (response.status !== 200) {
+    throwForStatus(
+      response.status,
+      await readPayload(response),
+      "Evidence photo service is unavailable.",
+    );
+  }
+  const payload = await readPayload(response);
+  if (
+    typeof payload !== "object" ||
+    payload === null ||
+    !("data" in payload) ||
+    typeof payload.data !== "object" ||
+    payload.data === null
+  ) {
+    throw new PestCasesRequestError(
+      "unexpected",
+      "Evidence photo service returned an invalid response.",
+    );
+  }
+  const data = payload.data as Record<string, unknown>;
+  if (
+    (data.storage !== "local" && data.storage !== "blob") ||
+    typeof data.max_photos !== "number" ||
+    typeof data.max_bytes !== "number" ||
+    !Array.isArray(data.content_types) ||
+    typeof data.remaining !== "number" ||
+    !Number.isSafeInteger(data.remaining) ||
+    data.remaining < 0
+  ) {
+    throw new PestCasesRequestError(
+      "unexpected",
+      "Evidence photo service returned an invalid response.",
+    );
+  }
+  return {
+    storage: data.storage,
+    max_photos: data.max_photos,
+    max_bytes: data.max_bytes,
+    content_types: data.content_types.filter(
+      (value): value is string => typeof value === "string",
+    ),
+    remaining: data.remaining,
+  };
+}
+
 export async function uploadEvidencePhotos(
   caseId: number,
   files: File[],
   csrfToken: string,
 ): Promise<PestCaseDetail> {
+  const config = await getEvidenceStorageConfig(caseId);
+
+  if (config.storage === "blob") {
+    if (files.length > config.remaining) {
+      throw new PestCasesRequestError(
+        "invalid",
+        "Upload at most 3 evidence photos per case.",
+      );
+    }
+
+    const uploaded: Array<{ pathname: string; original_filename: string }> = [];
+    for (const file of files) {
+      const extension = evidenceObjectExtension(file.type);
+      const pathname =
+        extension === null
+          ? null
+          : evidenceObjectKey(caseId, file.type, crypto.randomUUID());
+      if (pathname === null) {
+        throw new PestCasesRequestError(
+          "invalid",
+          "Evidence photos must be JPEG, PNG, or WebP.",
+        );
+      }
+      let blob;
+      try {
+        blob = await upload(pathname, file, {
+          access: "private",
+          handleUploadUrl: "/api/evidence/upload",
+          clientPayload: JSON.stringify({ caseId }),
+          headers: { "X-CSRF-Token": csrfToken },
+          contentType: file.type,
+          multipart: false,
+        });
+      } catch {
+        throw new PestCasesRequestError(
+          "unavailable",
+          "Evidence photos could not be uploaded.",
+        );
+      }
+      if (!isEvidenceObjectKeyForCase(blob.pathname, caseId)) {
+        throw new PestCasesRequestError(
+          "unexpected",
+          "Evidence photos could not be uploaded.",
+        );
+      }
+      uploaded.push({
+        pathname: blob.pathname,
+        original_filename: file.name,
+      });
+    }
+
+    let finalizeResponse: Response;
+    try {
+      finalizeResponse = await authenticatedFetch(
+        `/api/v1/pest-cases/${caseId}/evidence-photos/finalize`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
+          },
+          body: JSON.stringify({ photos: uploaded }),
+        },
+      );
+    } catch {
+      throw new PestCasesRequestError(
+        "unavailable",
+        "Evidence photos could not be uploaded.",
+      );
+    }
+    if (finalizeResponse.status === 201) {
+      return parseSingleCase(
+        await readPayload(finalizeResponse),
+        "Evidence photos could not be uploaded.",
+      );
+    }
+    throwForStatus(
+      finalizeResponse.status,
+      await readPayload(finalizeResponse),
+      "Evidence photos could not be uploaded.",
+    );
+  }
+
   const body = new FormData();
   files.forEach((file) => body.append("photos", file));
   let response: Response;
