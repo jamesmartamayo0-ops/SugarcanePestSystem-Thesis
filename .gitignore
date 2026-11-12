@@ -3,7 +3,8 @@
 .env.*
 !.env.example
 
-backend/.venv/
+.venv/
+venv/
 __pycache__/
 *.pyc
 .pytest_cache/
@@ -18,3 +19,10 @@ backend/instance/
 # Private key protections
 *.pem
 *.key
+*.p12
+*.pfx
+
+# Local database dumps
+*.sql
+*.dump
+*.backup
