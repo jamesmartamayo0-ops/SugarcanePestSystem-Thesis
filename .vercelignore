@@ -1,0 +1,29 @@
+# Vercel CLI uploads ignore this file's patterns (it does not read .gitignore).
+# Keep local secrets, virtualenvs, caches, and local data out of deployments.
+**/.env
+**/.env.*
+!**/.env.example
+
+**/.venv
+**/venv
+**/node_modules
+**/__pycache__
+**/.pytest_cache
+**/.next
+**/tsconfig.tsbuildinfo
+
+backend/instance
+backend/tests
+uploads
+docs
+scripts
+.superpowers
+.claude
+
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.sql
+**/*.dump
+**/*.backup

@@ -27,6 +27,7 @@ def isolated_app_environment(request, monkeypatch):
     monkeypatch.setattr("app.config.load_dotenv", lambda *args, **kwargs: False)
     monkeypatch.setenv("SECRET_KEY", secrets.token_hex(32))
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "false")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv("DB_PASSWORD", "")
     monkeypatch.setenv("DB_HOST", "localhost")
     monkeypatch.setenv("DB_PORT", "99999")

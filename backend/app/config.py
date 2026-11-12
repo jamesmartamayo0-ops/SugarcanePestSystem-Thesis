@@ -5,7 +5,7 @@ from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from flask import Flask
-from sqlalchemy.engine import URL
+from sqlalchemy.engine import URL, make_url
 
 from app.evidence import validate_storage_mode
 
@@ -98,6 +98,13 @@ def configure_app(app: Flask) -> None:
     app.config["EVIDENCE_STORAGE"] = validate_storage_mode(
         os.getenv("EVIDENCE_STORAGE")
     )
+    database_url = database_url_from_env(os.getenv("DATABASE_URL"))
+    if database_url is not None:
+        # Hosted Postgres (e.g. Neon on Vercel) supplies one connection string.
+        app.config["DB_PASSWORD_CONFIGURED"] = database_url.password is not None
+        app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+        return
+
     app.config["SQLALCHEMY_DATABASE_URI"] = URL.create(
         "postgresql+psycopg",
         username=os.getenv("DB_USER", "sugarcane_app"),
@@ -106,3 +113,12 @@ def configure_app(app: Flask) -> None:
         port=int(os.getenv("DB_PORT", "5434")),
         database=os.getenv("DB_NAME", "sugarcane_pest_db"),
     )
+
+
+def database_url_from_env(value: str | None) -> URL | None:
+    if value is None or not value.strip():
+        return None
+    url = make_url(value.strip())
+    if url.get_backend_name() not in {"postgres", "postgresql"}:
+        raise ValueError("DATABASE_URL must be a PostgreSQL connection string.")
+    return url.set(drivername="postgresql+psycopg")
