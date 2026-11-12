@@ -383,7 +383,13 @@ export default function FarmsPage() {
             Record a farm or plot for a registered farmer. Ownership is fixed to the selected
             farmer once the farm is saved.
           </p>
-          {farmers.length === 0 && !loadingList ? (
+          {/* Wait for the farmer list before choosing form vs. empty state, so the
+              form and its map are not shown and then torn down on every load. */}
+          {farmers.length === 0 && loadingList ? (
+            <p role="status" className="gov-loading-state">
+              Loading farmers...
+            </p>
+          ) : farmers.length === 0 ? (
             <p role="status" className="gov-empty-state">
               Add a farmer first before recording a farm.{" "}
               <Link href="/farmers" className="gov-activity-link">

@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { AuthLayout } from "@/components/auth-layout";
 import { Icon } from "@/components/icons";
-import SystemStatus from "@/components/system-status";
 
 export default function Home() {
   return (
@@ -20,7 +19,6 @@ export default function Home() {
             Sign in
             <Icon name="arrow-right" size={18} />
           </Link>
-          <SystemStatus />
         </div>
 
         <p className="gov-auth-note">
