@@ -71,7 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
 ];
 
 /*
- * Display labels only. Underlying role values (ADMIN / TECHNICIAN)
+ * Displays labels only. Underlying role values (ADMIN / TECHNICIAN)
  * are unchanged everywhere else.
  */
 export function roleDisplayName(role: UserRole): string {
