@@ -3189,9 +3189,9 @@ a.gov-step-inner:hover {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 32px;
   min-height: 100vh;
-  padding: 40px 52px 32px;
+  padding: 44px 56px 32px;
   color: #dbe7de;
   background-color: var(--brand-900);
   border-right: 4px solid var(--accent);
@@ -3202,18 +3202,23 @@ a.gov-step-inner:hover {
 }
 
 .gov-auth-identity {
+  flex: 1;
   display: grid;
+  align-content: start;
   gap: 14px;
 }
 
 .gov-auth-seal {
-  width: 88px;
-  height: 88px;
+  width: 104px;
+  height: 104px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 8px rgba(201, 162, 58, 0.16);
 }
 
 .gov-auth-office {
   margin: 0;
-  font-size: var(--text-control);
+  font-size: var(--text-meta);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3221,72 +3226,18 @@ a.gov-step-inner:hover {
 }
 
 .gov-auth-system {
-  max-width: 24ch;
+  max-width: 22ch;
   margin: 0;
-  font-size: 26px;
+  font-size: 30px;
   font-weight: 600;
-  line-height: 1.28;
+  line-height: 1.22;
+  letter-spacing: -0.01em;
   color: #ffffff;
 }
 
-.gov-auth-intro {
-  max-width: 48ch;
-  margin: 0;
-  font-size: var(--text-body);
-  line-height: 1.6;
-  color: #c4d6ca;
-}
-
-.gov-auth-stages-title {
-  margin: 0 0 10px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #93ad9b;
-}
-
-.gov-auth-stages {
-  display: grid;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  counter-reset: gov-auth-stage;
-}
-
-.gov-auth-stages li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 30px;
-  font-size: var(--text-control);
-  color: #dbe7de;
-  counter-increment: gov-auth-stage;
-}
-
-.gov-auth-stages li::before {
-  content: counter(gov-auth-stage);
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent-light);
-  border: 1px solid rgba(234, 210, 140, 0.45);
-  border-radius: 50%;
-}
-
-.gov-auth-stages-note {
-  margin: 10px 0 0;
-  font-size: var(--text-meta);
-  color: #93ad9b;
-}
-
 .gov-auth-footer {
-  margin-top: auto;
+  display: grid;
+  gap: 4px;
   padding-top: var(--space-lg);
   font-size: var(--text-meta);
   line-height: 1.5;
@@ -3309,9 +3260,9 @@ a.gov-step-inner:hover {
 
 .gov-auth-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 440px;
   box-sizing: border-box;
-  padding: var(--space-2xl);
+  padding: 40px 40px 28px;
   background-color: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
@@ -3329,7 +3280,8 @@ a.gov-step-inner:hover {
 
 .gov-auth-title {
   margin: 0;
-  font-size: 24px;
+  font-size: 26px;
+  letter-spacing: -0.01em;
   font-weight: 700;
   line-height: 1.25;
   color: var(--brand-950);
@@ -3349,6 +3301,33 @@ a.gov-step-inner:hover {
 
 .gov-auth-form .gov-alert {
   margin: 0;
+}
+
+.gov-auth-form .gov-input,
+.gov-auth-form .gov-button {
+  min-height: 44px;
+}
+
+.gov-auth-form .gov-input-addon {
+  width: 38px;
+}
+
+.gov-auth-capslock {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 0;
+  font-size: var(--text-meta);
+  font-weight: 600;
+  color: var(--warning-ink);
+}
+
+.gov-auth-help {
+  margin: var(--space-lg) 0 0;
+  font-size: var(--text-meta);
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-muted);
 }
 
 .gov-auth-pending {
@@ -3371,7 +3350,7 @@ a.gov-step-inner:hover {
 }
 
 .gov-auth-legal {
-  max-width: 420px;
+  max-width: 440px;
   margin: 0;
   font-size: var(--text-micro);
   text-align: center;
@@ -3384,7 +3363,11 @@ a.gov-step-inner:hover {
   }
 
   .gov-auth-brand {
-    padding: 32px 36px 28px;
+    padding: 36px 40px 28px;
+  }
+
+  .gov-auth-system {
+    font-size: 26px;
   }
 }
 
@@ -3411,6 +3394,8 @@ a.gov-step-inner:hover {
     grid-row: span 2;
     width: 56px;
     height: 56px;
+    margin-bottom: 0;
+    box-shadow: 0 0 0 2px var(--accent);
   }
 
   .gov-auth-system {
@@ -3422,8 +3407,6 @@ a.gov-step-inner:hover {
     font-size: var(--text-micro);
   }
 
-  .gov-auth-intro,
-  .gov-auth-workflow,
   .gov-auth-footer {
     display: none;
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { AuthLayout } from "@/components/auth-layout";
@@ -14,12 +14,17 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
 
   useEffect(() => {
     if (auth.status === "authenticated") {
       router.replace("/dashboard");
     }
   }, [auth.status, router]);
+
+  function trackCapsLock(event: KeyboardEvent<HTMLInputElement>) {
+    setCapsLockOn(event.getModifierState("CapsLock"));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +78,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="gov-form gov-auth-form">
               <div className="gov-field">
                 <label htmlFor="username" className="gov-label">
-                  Username <span className="gov-required" aria-hidden="true">*</span>
+                  Username
                 </label>
                 <input
                   id="username"
@@ -89,7 +94,7 @@ export default function LoginPage() {
               </div>
               <div className="gov-field">
                 <label htmlFor="password" className="gov-label">
-                  Password <span className="gov-required" aria-hidden="true">*</span>
+                  Password
                 </label>
                 <div className="gov-input-group">
                   <input
@@ -100,6 +105,10 @@ export default function LoginPage() {
                     maxLength={1024}
                     required
                     className="gov-input"
+                    onKeyDown={trackCapsLock}
+                    onKeyUp={trackCapsLock}
+                    onBlur={() => setCapsLockOn(false)}
+                    aria-describedby={capsLockOn ? "password-capslock" : undefined}
                   />
                   <button
                     type="button"
@@ -113,6 +122,12 @@ export default function LoginPage() {
                     <Icon name={showPassword ? "eye-off" : "eye"} size={18} />
                   </button>
                 </div>
+                {capsLockOn && (
+                  <p id="password-capslock" className="gov-auth-capslock" role="status">
+                    <Icon name="alert-triangle" size={14} />
+                    Caps Lock is on.
+                  </p>
+                )}
               </div>
               {auth.status === "error" && !error && (
                 <p role="alert" className="gov-alert gov-alert-warning">
@@ -134,6 +149,9 @@ export default function LoginPage() {
                 {submitting ? "Signing in..." : "Sign in"}
               </button>
             </form>
+            <p className="gov-auth-help">
+              Forgot your password? Contact your system administrator.
+            </p>
           </>
         )}
 
