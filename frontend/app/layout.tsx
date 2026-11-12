@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { AuthProvider } from "@/components/auth-provider";
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   description: `Locally hosted sugarcane pest inspection and intervention workflow management system for the ${OFFICE_NAME}.`,
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
