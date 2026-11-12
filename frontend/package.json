@@ -9,7 +9,7 @@
     "lint": "eslint",
     "test:gis": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/farm-location.test.mts lib/farm-map.test.mts",
     "test:farm-map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/farm-map.test.mts",
-    "test:inspections": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/inspection-permissions.test.mts"
+    "test:inspections": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/inspection-permissions.test.mts lib/inspection-initial-report.test.mts"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

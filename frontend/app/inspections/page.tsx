@@ -27,9 +27,13 @@ import {
 } from "@/lib/inspections";
 import {
   PestCasesRequestError,
+  getPestCase,
   listPestCases,
+  type PestCaseDetail,
   type PestCaseSummary,
 } from "@/lib/pest-cases";
+import { EvidencePhotoGallery } from "@/components/evidence-photos";
+import { initialReportView } from "@/lib/inspection-initial-report";
 import {
   canManageInspectionSchedule,
   canRecordInspection,
@@ -90,6 +94,8 @@ export default function InspectionsPage() {
   const [detail, setDetail] = useState<InspectionDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [caseRecord, setCaseRecord] = useState<PestCaseDetail | null>(null);
+  const [caseRecordError, setCaseRecordError] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
   const [recording, setRecording] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -197,10 +203,14 @@ export default function InspectionsPage() {
       setSelectedId(inspectionId);
       setDetail(null);
       setDetailError(null);
+      setCaseRecord(null);
+      setCaseRecordError(false);
       setActionError(null);
       setLoadingDetail(true);
+      let loaded: InspectionDetail;
       try {
-        setDetail(await getInspection(inspectionId));
+        loaded = await getInspection(inspectionId);
+        setDetail(loaded);
       } catch (failure) {
         if (
           failure instanceof InspectionsRequestError &&
@@ -214,8 +224,23 @@ export default function InspectionsPage() {
             ? failure.message
             : "Inspection could not be read.",
         );
+        return;
       } finally {
         setLoadingDetail(false);
+      }
+      // Read-only initial report owned by the Pest Case, loaded through the
+      // existing scoped case endpoint. Failure never blocks the inspection view.
+      try {
+        setCaseRecord(await getPestCase(loaded.pest_case_id));
+      } catch (failure) {
+        if (
+          failure instanceof PestCasesRequestError &&
+          failure.kind === "unauthenticated"
+        ) {
+          router.replace("/login");
+          return;
+        }
+        setCaseRecordError(true);
       }
     },
     [router],
@@ -447,6 +472,7 @@ export default function InspectionsPage() {
 
   const canRecord = (item: InspectionDetail): boolean =>
     canRecordInspection(role, userId, item);
+  const initialReport = detail ? initialReportView(detail, caseRecord) : null;
   const today = manilaTodayInputValue();
 
   // Confirmations about the open inspection are shown beside it, not in the form above.
@@ -716,7 +742,7 @@ export default function InspectionsPage() {
               <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}
               </p>
-            ) : detail ? (
+            ) : detail && initialReport ? (
               <div>
                 <div className="gov-record-toolbar">
                   <div>
@@ -777,12 +803,48 @@ export default function InspectionsPage() {
                     <dl className="gov-detail-grid">
                       <div>
                         <dt className="gov-detail-label">Suspected Pest (as reported)</dt>
-                        <dd className="gov-detail-value">{pestLabel(detail.pest_case.pest_name)}</dd>
+                        <dd className="gov-detail-value">{initialReport.suspectedPest}</dd>
                       </div>
                       <div>
-                        <dt className="gov-detail-label">Reported area</dt>
+                        <dt className="gov-detail-label">Reported affected area</dt>
                         <dd className="gov-detail-value">
-                          {detail.pest_case.reported_area_hectares.toFixed(2)} ha (unchanged)
+                          {initialReport.reportedArea} (unchanged)
+                        </dd>
+                      </div>
+                      <div className="gov-detail-wide">
+                        <dt className="gov-detail-label">
+                          Farmer Observation / Observed Symptoms
+                        </dt>
+                        <dd className="gov-detail-value">
+                          {initialReport.observation ??
+                            (caseRecordError
+                              ? "Unavailable — open the case record."
+                              : "Loading...")}
+                        </dd>
+                      </div>
+                      <div className="gov-detail-wide">
+                        <dt className="gov-detail-label">Pest / Damage Evidence Photos</dt>
+                        <dd className="gov-detail-value">
+                          {initialReport.photos !== null ? (
+                            <>
+                              <EvidencePhotoGallery
+                                caseId={initialReport.caseId}
+                                photos={initialReport.photos}
+                              />
+                              {initialReport.photos.length > 0 && (
+                                <p className="gov-compare-caption">
+                                  Photos support the initial report and do not constitute
+                                  confirmed pest identification.
+                                </p>
+                              )}
+                            </>
+                          ) : caseRecordError ? (
+                            <span role="status">
+                              Evidence photos could not be loaded. Open the case record.
+                            </span>
+                          ) : (
+                            "Loading..."
+                          )}
                         </dd>
                       </div>
                     </dl>
