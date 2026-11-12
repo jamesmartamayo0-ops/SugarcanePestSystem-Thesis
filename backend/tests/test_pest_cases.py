@@ -807,8 +807,23 @@ def _install_blob_evidence(monkeypatch, client):
     return photo_store, blob_store
 
 
-def _blob_key(case_id=1, extension="png"):
-    return f"ev/{case_id}/{'a' * 32}.{extension}"
+def _blob_key(case_id=1, extension="png", char="a"):
+    return f"ev/{case_id}/{char * 32}.{extension}"
+
+
+def _seed_recorded_photos(photo_store, keys):
+    for index, key in enumerate(keys, start=1):
+        photo_store.append(
+            PestCaseEvidencePhoto(
+                id=index,
+                pest_case_id=1,
+                stored_name=key,
+                original_filename=f"recorded-{index}.png",
+                content_type="image/png",
+                byte_size=len(PNG_BYTES),
+                uploaded_by_user_id=2,
+            )
+        )
 
 
 def _authorize_upload(client, token, case_id=1):
@@ -903,6 +918,138 @@ def test_blob_finalize_is_idempotent_for_recorded_object(
     assert _finalize(client, token, [photo]).status_code == 409
     assert len(photo_store) == 1
     assert key not in blob_store.deleted
+
+
+def test_blob_finalize_rejects_recorded_retry_at_limit(
+    pest_case, monkeypatch
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    keys = [_blob_key(char=char) for char in ("a", "b", "c")]
+    _seed_recorded_photos(photo_store, keys)
+    for key in keys:
+        blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": keys[0], "original_filename": "recorded.png"}],
+    )
+    assert response.status_code == 409
+    assert blob_store.deleted == []
+    assert len(photo_store) == 3
+
+
+def test_blob_finalize_rejects_two_recorded_retries(
+    pest_case, monkeypatch
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    keys = [_blob_key(char=char) for char in ("a", "b")]
+    _seed_recorded_photos(photo_store, keys)
+    for key in keys:
+        blob_store.objects[key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [
+            {"pathname": keys[0], "original_filename": "one.png"},
+            {"pathname": keys[1], "original_filename": "two.png"},
+        ],
+    )
+    assert response.status_code == 409
+    assert blob_store.deleted == []
+    assert len(photo_store) == 2
+
+
+def test_blob_finalize_mixed_recorded_and_new_cleans_only_new(
+    pest_case, monkeypatch
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    recorded_key = _blob_key(char="a")
+    new_key = _blob_key(char="b")
+    _seed_recorded_photos(photo_store, [recorded_key])
+    blob_store.objects[recorded_key] = (PNG_BYTES, "image/png")
+    blob_store.objects[new_key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [
+            {"pathname": recorded_key, "original_filename": "recorded.png"},
+            {"pathname": new_key, "original_filename": "new.png"},
+        ],
+    )
+    assert response.status_code == 409
+    assert blob_store.deleted == [new_key]
+    assert recorded_key not in blob_store.deleted
+    assert len(photo_store) == 1
+
+
+def test_blob_finalize_allows_new_photo_below_limit(
+    pest_case, monkeypatch
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    recorded_keys = [_blob_key(char=char) for char in ("a", "b")]
+    _seed_recorded_photos(photo_store, recorded_keys)
+    new_key = _blob_key(char="c")
+    blob_store.objects[new_key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": new_key, "original_filename": "new.png"}],
+    )
+    assert response.status_code == 201
+    assert len(photo_store) == 3
+    assert blob_store.deleted == []
+
+
+def test_blob_finalize_rejects_new_photo_over_limit_and_keeps_recorded(
+    pest_case, monkeypatch
+):
+    client, _, _, _ = pest_case
+    photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
+    recorded_keys = [_blob_key(char=char) for char in ("a", "b", "c")]
+    _seed_recorded_photos(photo_store, recorded_keys)
+    for key in recorded_keys:
+        blob_store.objects[key] = (PNG_BYTES, "image/png")
+    new_key = _blob_key(char="d")
+    blob_store.objects[new_key] = (PNG_BYTES, "image/png")
+    token = login_technician(client)
+
+    response = _finalize(
+        client,
+        token,
+        [{"pathname": new_key, "original_filename": "new.png"}],
+    )
+    assert response.status_code == 400
+    assert blob_store.deleted == [new_key]
+    assert all(key not in blob_store.deleted for key in recorded_keys)
+    assert len(photo_store) == 3
+
+
+def test_blob_cleanup_guard_skips_recorded_names(pest_case, monkeypatch):
+    client, _, _, _ = pest_case
+    _, blob_store = _install_blob_evidence(monkeypatch, client)
+    recorded_key = _blob_key(char="a")
+    new_key = _blob_key(char="b")
+    blob_store.objects[recorded_key] = (PNG_BYTES, "image/png")
+    blob_store.objects[new_key] = (PNG_BYTES, "image/png")
+
+    with client.application.app_context():
+        pest_cases_module._delete_blob_evidence(
+            [recorded_key, new_key], {recorded_key}
+        )
+
+    assert blob_store.deleted == [new_key]
 
 
 @pytest.mark.parametrize(

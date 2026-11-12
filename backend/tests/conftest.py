@@ -20,6 +20,7 @@ def pytest_ignore_collect(collection_path, config):
 
 @pytest.fixture(autouse=True)
 def isolated_app_environment(request, monkeypatch):
+    monkeypatch.setenv("EVIDENCE_STORAGE", "local")
     if request.node.path.is_relative_to(INTEGRATION_TESTS):
         return
     # Tests never read the real backend .env or connect to the thesis database.

@@ -792,8 +792,17 @@ def authorize_evidence_upload(case_id: int):
     )
 
 
-def _delete_blob_evidence(stored_names: list[str]) -> None:
+def _delete_blob_evidence(
+    stored_names: list[str], protected_names: set[str] | None = None
+) -> None:
+    """Best-effort cleanup that never deletes an object still referenced by the DB."""
+    protected = protected_names or set()
     for stored_name in stored_names:
+        if stored_name in protected:
+            current_app.logger.error(
+                "Refusing to delete an evidence object that is already recorded."
+            )
+            continue
         evidence.blob_delete(stored_name)
 
 
@@ -856,17 +865,24 @@ def finalize_evidence_photos(case_id: int):
     except SQLAlchemyError:
         db.session.rollback()
         current_app.logger.error("Evidence finalization count check failed.")
-        _delete_blob_evidence(stored_names)
+        # Without a trustworthy DB read we cannot know whether an uploaded
+        # object is already recorded. Leave objects for safe manual cleanup.
         return auth_error("Evidence photo service unavailable.", 503)
-    if len(existing) + len(prepared) > evidence.MAX_PHOTOS:
-        db.session.rollback()
-        _delete_blob_evidence(stored_names)
-        return auth_error("Upload at most 3 evidence photos per case.", 400)
+
     recorded_names = {photo.stored_name for photo in existing}
-    if any(stored_name in recorded_names for stored_name in stored_names):
-        # Never delete an object that is already referenced by an evidence row.
+    new_names = [
+        stored_name for stored_name in stored_names if stored_name not in recorded_names
+    ]
+    if len(new_names) != len(stored_names):
+        # A retry may contain already-recorded objects. Never delete those.
         db.session.rollback()
+        _delete_blob_evidence(new_names, recorded_names)
         return auth_error("Evidence photo is already recorded.", 409)
+
+    if len(existing) + len(new_names) > evidence.MAX_PHOTOS:
+        db.session.rollback()
+        _delete_blob_evidence(new_names, recorded_names)
+        return auth_error("Upload at most 3 evidence photos per case.", 400)
 
     verified: list[tuple[str, str, str, int]] = []
     try:
@@ -889,11 +905,11 @@ def finalize_evidence_photos(case_id: int):
             verified.append((pathname, original_name, expected_type, size))
     except evidence.EvidenceObjectInvalid as exc:
         current_app.logger.warning("Evidence finalization rejected: %s", exc)
-        _delete_blob_evidence(stored_names)
+        _delete_blob_evidence(new_names, recorded_names)
         return auth_error(str(exc), 400)
     except Exception:
         current_app.logger.error("Evidence object verification failed.")
-        _delete_blob_evidence(stored_names)
+        _delete_blob_evidence(new_names, recorded_names)
         return auth_error("Evidence photo service unavailable.", 503)
 
     try:
@@ -911,7 +927,7 @@ def finalize_evidence_photos(case_id: int):
         persist_evidence_photos(photos)
     except SQLAlchemyError:
         db.session.rollback()
-        _delete_blob_evidence(stored_names)
+        _delete_blob_evidence(new_names, recorded_names)
         current_app.logger.error("Evidence photo metadata save failed.")
         return auth_error("Evidence photo service unavailable.", 503)
 
