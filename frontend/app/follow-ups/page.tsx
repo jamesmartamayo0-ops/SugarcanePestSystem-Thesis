@@ -14,6 +14,7 @@ import {
   useRevealOnChange,
 } from "@/components/ui";
 import { WorkflowSteps } from "@/components/workflow-steps";
+import { DetailSkeleton, TableSkeleton } from "@/components/skeleton";
 import {
   FollowUpsRequestError,
   dueBadgeLabel,
@@ -376,9 +377,11 @@ export default function FollowUpsPage() {
             </button>
           </div>
           {loading ? (
-            <p role="status" className="gov-loading-state">
-              Loading follow-up queue...
-            </p>
+            <TableSkeleton
+              label="Loading follow-up queue"
+              columns={["Case / Farm / Farmer", "Agriculture Technician", "Method / Performed", "Due", "Actions"]}
+              tableClassName="min-w-[860px]"
+            />
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
@@ -683,9 +686,11 @@ export default function FollowUpsPage() {
             </div>
           </div>
           {loading ? (
-            <p role="status" className="gov-loading-state">
-              Loading follow-up history...
-            </p>
+            <TableSkeleton
+              label="Loading follow-up history"
+              columns={["Follow-up", "Observation", "Outcome / Case", "Actions"]}
+              tableClassName="min-w-[860px]"
+            />
           ) : history.length === 0 ? (
             <p role="status" className="gov-empty-state">
               No recorded reassessments found.
@@ -771,9 +776,7 @@ export default function FollowUpsPage() {
             className="gov-card gov-record-section gov-record-section--selected"
           >
             {loadingDetail ? (
-              <p role="status" className="gov-loading-state">
-                Loading follow-up details...
-              </p>
+              <DetailSkeleton label="Loading follow-up details" fields={6} />
             ) : detailError ? (
               <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}

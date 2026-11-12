@@ -8,6 +8,7 @@ import { formatDisplayDate, pestLabel, workflowBadgeClass, workflowLabel } from 
 import { useAuth } from "@/components/auth-provider";
 import FarmMonitoringMap from "@/components/farm-monitoring-map";
 import { Icon, type IconName } from "@/components/icons";
+import { DashboardSummarySkeleton, MonitoringMapSkeleton } from "@/components/skeleton";
 import { PageHeader, SessionNotice } from "@/components/ui";
 import {
   DashboardRequestError,
@@ -284,9 +285,11 @@ export default function DashboardPage() {
           Operational summary
         </h2>
         {loadingSummary ? (
-          <p role="status" className="gov-loading-state gov-loading-state--tall">
-            Loading operational summary...
-          </p>
+          <DashboardSummarySkeleton
+            attentionCards={ATTENTION_ITEMS.length}
+            pipelineGroups={PIPELINE.map((group) => group.items.length)}
+            progressRows={IN_PROGRESS_ITEMS.length}
+          />
         ) : summaryError ? (
           <p role="alert" className="gov-alert gov-alert-error">{summaryError}</p>
         ) : summary ? (
@@ -498,9 +501,7 @@ export default function DashboardPage() {
           and do not represent surveyed property boundaries or establish land ownership.
         </p>
         {loadingFarmMap && farmMap === null ? (
-          <div className="gov-monitoring-map-message gov-map-loading" role="status">
-            Loading farm monitoring data...
-          </div>
+          <MonitoringMapSkeleton label="Loading farm monitoring data" />
         ) : farmMapError ? (
           <div className="gov-map-error">
             <p className="gov-alert gov-alert-error" role="alert">{farmMapError}</p>

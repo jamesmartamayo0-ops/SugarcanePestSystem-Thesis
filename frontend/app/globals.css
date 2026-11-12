@@ -1897,6 +1897,314 @@ a.gov-step-inner:hover {
 }
 
 /* ------------------------------------------------------------------ */
+/* Loading skeletons                                                   */
+/* ------------------------------------------------------------------ */
+
+/* Placeholders reuse the real layout classes (cards, grids, tables), so
+   only the shapes are defined here. Sizes follow the line heights of the
+   text they stand in for, keeping the page still when data arrives. */
+
+.gov-skeleton-region {
+  display: block;
+  min-width: 0;
+}
+
+.gov-skeleton-body {
+  display: block;
+  min-width: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.gov-skeleton {
+  display: block;
+  max-width: 100%;
+  height: 12px;
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-sunken);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.6) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 200% 100%;
+  animation: gov-skeleton-shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes gov-skeleton-shimmer {
+  from {
+    background-position: 150% 0;
+  }
+  to {
+    background-position: -50% 0;
+  }
+}
+
+/* Static grey blocks only; no movement for reduced-motion users. */
+@media (prefers-reduced-motion: reduce) {
+  .gov-skeleton {
+    animation: none !important;
+    background-image: none;
+  }
+}
+
+.gov-skeleton-text {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.gov-skeleton-heading {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.gov-skeleton-eyebrow {
+  height: 10px;
+}
+
+.gov-skeleton-title {
+  height: 16px;
+}
+
+.gov-skeleton-meta {
+  height: 11px;
+}
+
+.gov-card > .gov-skeleton-title + .gov-skeleton-meta,
+.gov-record-section > .gov-skeleton-title + .gov-skeleton-meta {
+  margin-top: 8px;
+}
+
+.gov-skeleton-intro {
+  margin-top: 10px;
+}
+
+.gov-skeleton-badge {
+  width: 96px;
+  height: 22px;
+  border-radius: var(--radius-pill);
+}
+
+.gov-skeleton-button {
+  width: 64px;
+  height: 32px;
+  border-radius: var(--radius);
+}
+
+.gov-skeleton-button--wide {
+  width: 120px;
+}
+
+.gov-skeleton-stat-label {
+  height: 14px;
+  margin: 2px 0 3px;
+}
+
+.gov-skeleton-stat-icon {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+}
+
+.gov-skeleton-stat-value {
+  width: 64px;
+  height: 28px;
+  margin-top: 8px;
+}
+
+.gov-summary-grid--compact .gov-skeleton-stat-value {
+  width: 48px;
+  height: 22px;
+}
+
+.gov-skeleton-stat-note {
+  height: 11px;
+  margin-top: 8px;
+}
+
+.gov-skeleton-table th {
+  color: var(--text-muted);
+}
+
+.gov-skeleton-table td {
+  height: 44px;
+}
+
+.gov-skeleton-table td .gov-skeleton {
+  height: 11px;
+}
+
+.gov-skeleton-table td .gov-skeleton-button {
+  height: 32px;
+  margin-left: auto;
+}
+
+.gov-skeleton-table tbody tr:hover td {
+  background-color: transparent;
+}
+
+.gov-skeleton-detail-label {
+  height: 10px;
+}
+
+.gov-skeleton-detail-value {
+  height: 14px;
+  margin-top: 9px;
+}
+
+.gov-skeleton-field-label {
+  height: 13px;
+  margin: 2px 0;
+}
+
+.gov-skeleton-input {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--radius);
+}
+
+.gov-skeleton-form-action {
+  margin-top: var(--space-lg);
+}
+
+.gov-skeleton-count-list {
+  display: grid;
+}
+
+.gov-skeleton-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  min-height: 40px;
+}
+
+.gov-skeleton-count {
+  flex-shrink: 0;
+  width: 28px;
+  height: 18px;
+}
+
+.gov-skeleton-report-list {
+  margin-top: var(--space-md);
+}
+
+.gov-skeleton-report-list > .gov-skeleton-count-row {
+  border-bottom: 1px solid var(--border);
+}
+
+.gov-skeleton-report-list > .gov-skeleton-count-row:last-child {
+  border-bottom: 0;
+}
+
+.gov-skeleton-pipeline-list {
+  margin-top: var(--space-md);
+}
+
+.gov-progress-list.gov-skeleton-count-list > .gov-skeleton-count-row {
+  min-height: 62px;
+}
+
+.gov-skeleton-attention-card,
+.gov-skeleton-attention-card:hover {
+  gap: 10px;
+  border-color: var(--border);
+  border-left-color: var(--border-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+.gov-skeleton-attention-title {
+  margin-top: 2px;
+}
+
+.gov-skeleton-attention-count {
+  width: 44px;
+  height: 30px;
+}
+
+.gov-skeleton-step-marker {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+}
+
+.gov-skeleton-step-text {
+  flex: 1;
+  padding-top: 2px;
+}
+
+.gov-skeleton-photo {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  border-radius: 0.5rem;
+}
+
+.gov-skeleton-photo-caption {
+  height: 10px;
+}
+
+.gov-detail-grid.gov-skeleton-aside-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Map canvas placeholder: same box as the live map, with a faint pin. */
+.gov-skeleton-map {
+  position: relative;
+  overflow: hidden;
+  background-color: var(--surface-muted);
+  background-image:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: -1px -1px;
+}
+
+.gov-skeleton-map-pin {
+  width: 32px;
+  height: 32px;
+  background-color: var(--border-strong);
+  -webkit-mask: var(--icon-map-pin) center / contain no-repeat;
+  mask: var(--icon-map-pin) center / contain no-repeat;
+  animation: gov-skeleton-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes gov-skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gov-skeleton-map-pin {
+    animation: none !important;
+  }
+}
+
+/* Shown only when a request runs unusually long. */
+.gov-skeleton-slow {
+  margin: var(--space-md) 0 0;
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--text-meta);
+  color: var(--text-secondary);
+  background-color: var(--surface-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+@media print {
+  .gov-skeleton-region {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Tables                                                              */
 /* ------------------------------------------------------------------ */
 

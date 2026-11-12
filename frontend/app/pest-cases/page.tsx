@@ -16,6 +16,7 @@ import {
   useRevealOnChange,
 } from "@/components/ui";
 import { WorkflowSteps } from "@/components/workflow-steps";
+import { DetailSkeleton, TableSkeleton } from "@/components/skeleton";
 import {
   FarmsRequestError,
   listFarms,
@@ -878,9 +879,11 @@ function PestCasesPageInner() {
             </p>
           )}
           {loadingList ? (
-            <p role="status" className="gov-loading-state">
-              Loading pest cases...
-            </p>
+            <TableSkeleton
+              label="Loading pest cases"
+              columns={["Case", "Farm and farmer", "Reported area (ha)", "Status", "Observed", "Actions"]}
+              tableClassName="min-w-[720px]"
+            />
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
@@ -955,9 +958,7 @@ function PestCasesPageInner() {
             className="gov-card gov-record-section gov-record-section--selected"
           >
             {loadingDetail ? (
-              <p role="status" className="gov-loading-state">
-                Loading pest case details...
-              </p>
+              <DetailSkeleton label="Loading pest case details" fields={6} />
             ) : detailError ? (
               <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}

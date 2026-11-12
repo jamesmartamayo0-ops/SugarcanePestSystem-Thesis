@@ -10,7 +10,8 @@
     "test:gis": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/farm-location.test.mts lib/farm-map.test.mts",
     "test:farm-map": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/farm-map.test.mts",
     "test:inspections": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/inspection-permissions.test.mts lib/inspection-initial-report.test.mts",
-    "test:evidence": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/evidence-object.test.mts"
+    "test:evidence": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types lib/evidence-object.test.mts",
+    "test:skeleton": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types components/skeleton.test.mts"
   },
   "dependencies": {
     "@vercel/blob": "2.9.0",

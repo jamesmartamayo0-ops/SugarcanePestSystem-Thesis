@@ -33,6 +33,13 @@ import {
   type PestCaseSummary,
 } from "@/lib/pest-cases";
 import { EvidencePhotoGallery } from "@/components/evidence-photos";
+import {
+  DetailSkeleton,
+  EvidencePhotosSkeleton,
+  LoadingRegion,
+  SkeletonText,
+  TableSkeleton,
+} from "@/components/skeleton";
 import { initialReportView } from "@/lib/inspection-initial-report";
 import {
   canManageInspectionSchedule,
@@ -657,9 +664,11 @@ export default function InspectionsPage() {
             </div>
           </div>
           {loading ? (
-            <p role="status" className="gov-loading-state">
-              Loading inspections...
-            </p>
+            <TableSkeleton
+              label="Loading inspections"
+              columns={["Inspection", "Case / Farm / Farmer", "Agriculture Technician", "Scheduled", "Case status", "Actions"]}
+              tableClassName="min-w-[760px]"
+            />
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
@@ -735,9 +744,7 @@ export default function InspectionsPage() {
             className="gov-card gov-record-section gov-record-section--selected"
           >
             {loadingDetail ? (
-              <p role="status" className="gov-loading-state">
-                Loading inspection details...
-              </p>
+              <DetailSkeleton label="Loading inspection details" fields={4} compare />
             ) : detailError ? (
               <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}
@@ -817,9 +824,13 @@ export default function InspectionsPage() {
                         </dt>
                         <dd className="gov-detail-value">
                           {initialReport.observation ??
-                            (caseRecordError
-                              ? "Unavailable — open the case record."
-                              : "Loading...")}
+                            (caseRecordError ? (
+                              "Unavailable — open the case record."
+                            ) : (
+                              <LoadingRegion label="Loading farmer observation">
+                                <SkeletonText lines={2} widths={["92%", "58%"]} />
+                              </LoadingRegion>
+                            ))}
                         </dd>
                       </div>
                       <div className="gov-detail-wide">
@@ -843,7 +854,7 @@ export default function InspectionsPage() {
                               Evidence photos could not be loaded. Open the case record.
                             </span>
                           ) : (
-                            "Loading..."
+                            <EvidencePhotosSkeleton />
                           )}
                         </dd>
                       </div>

@@ -7,6 +7,7 @@ import { roleDisplayName } from "@/components/app-shell";
 import { useAuth } from "@/components/auth-provider";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Icon } from "@/components/icons";
+import { TableSkeleton } from "@/components/skeleton";
 import {
   PageHeader,
   RequiredLegend,
@@ -318,9 +319,11 @@ export default function AdminPage() {
             </button>
           </div>
           {loadingList ? (
-            <p role="status" className="gov-loading-state">
-              Loading staff accounts...
-            </p>
+            <TableSkeleton
+              label="Loading staff accounts"
+              columns={["Username", "Full name", "Role", "Status", "Actions"]}
+              tableClassName="min-w-[640px]"
+            />
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error gov-feedback">
               {listError}

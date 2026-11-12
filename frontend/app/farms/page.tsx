@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import FarmLocationMap from "@/components/farm-location-map";
 import { Icon } from "@/components/icons";
+import { FormSkeleton, TableSkeleton } from "@/components/skeleton";
 import {
   PageHeader,
   RequiredLegend,
@@ -386,9 +387,7 @@ export default function FarmsPage() {
           {/* Wait for the farmer list before choosing form vs. empty state, so the
               form and its map are not shown and then torn down on every load. */}
           {farmers.length === 0 && loadingList ? (
-            <p role="status" className="gov-loading-state">
-              Loading farmers...
-            </p>
+            <FormSkeleton label="Loading farmers for the farm form" fields={6} />
           ) : farmers.length === 0 ? (
             <p role="status" className="gov-empty-state">
               Add a farmer first before recording a farm.{" "}
@@ -560,9 +559,11 @@ export default function FarmsPage() {
             </p>
           )}
           {loadingList ? (
-            <p role="status" className="gov-loading-state">
-              Loading farms...
-            </p>
+            <TableSkeleton
+              label="Loading farms"
+              columns={["Farm / plot", "Barangay", "Area (ha)", "Farmer", "Approximate location", "Actions"]}
+              tableClassName="min-w-[720px]"
+            />
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}

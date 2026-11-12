@@ -16,6 +16,7 @@ import { EvidencePhotoGallery } from "@/components/evidence-photos";
 import { Icon, type IconName } from "@/components/icons";
 import { PageHeader, SessionNotice } from "@/components/ui";
 import { CaseProgress } from "@/components/workflow-steps";
+import { CaseRecordSkeleton } from "@/components/skeleton";
 import {
   TimelineRequestError,
   getCaseTimeline,
@@ -300,9 +301,7 @@ export default function PestCaseTimelinePage() {
           Invalid pest case reference.
         </p>
       ) : loading ? (
-        <p role="status" className="gov-loading-state gov-loading-state--tall">
-          Loading case record...
-        </p>
+        <CaseRecordSkeleton />
       ) : error ? (
         <p role="alert" className="gov-alert gov-alert-error">
           {error}

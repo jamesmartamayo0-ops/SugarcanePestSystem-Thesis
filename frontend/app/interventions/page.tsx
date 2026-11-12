@@ -14,6 +14,7 @@ import {
   useRevealOnChange,
 } from "@/components/ui";
 import { WorkflowSteps } from "@/components/workflow-steps";
+import { DetailSkeleton, TableSkeleton } from "@/components/skeleton";
 import {
   INTERVENTION_METHOD_CATEGORIES,
   InterventionsRequestError,
@@ -748,9 +749,11 @@ export default function InterventionsPage() {
             </div>
           </div>
           {loading ? (
-            <p role="status" className="gov-loading-state">
-              Loading interventions...
-            </p>
+            <TableSkeleton
+              label="Loading interventions"
+              columns={["Intervention", "Case / Farm / Farmer", "Agriculture Technician", "Case status", "Follow-up", "Actions"]}
+              tableClassName="min-w-[820px]"
+            />
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}
@@ -843,9 +846,7 @@ export default function InterventionsPage() {
             className="gov-card gov-record-section gov-record-section--selected"
           >
             {loadingDetail ? (
-              <p role="status" className="gov-loading-state">
-                Loading intervention details...
-              </p>
+              <DetailSkeleton label="Loading intervention details" fields={4} />
             ) : detailError ? (
               <p role="alert" className="gov-alert gov-alert-error">
                 {detailError}

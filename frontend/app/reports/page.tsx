@@ -8,6 +8,7 @@ import { pestLabel, workflowLabel } from "@/lib/presentation";
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icons";
 import { PageHeader, Seal, SessionNotice } from "@/components/ui";
+import { ReportSkeleton } from "@/components/skeleton";
 import { OFFICE_NAME, SYSTEM_NAME } from "@/lib/branding";
 import {
   ReportsRequestError,
@@ -341,9 +342,10 @@ export default function ReportsPage() {
         )}
 
         {loading ? (
-          <p role="status" className="gov-loading-state">
-            Loading operational report...
-          </p>
+          <ReportSkeleton
+            statusRows={9}
+            tableColumns={["Case", "Farmer / Farm", "Status", "Cycle / Follow-up", "Actions"]}
+          />
         ) : listError ? (
           <p role="alert" className="gov-alert gov-alert-error gov-feedback">
             {listError}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
 import { Icon } from "@/components/icons";
+import { TableSkeleton } from "@/components/skeleton";
 import {
   PageHeader,
   RequiredLegend,
@@ -367,9 +368,11 @@ export default function FarmersPage() {
             </p>
           )}
           {loadingList ? (
-            <p role="status" className="gov-loading-state">
-              Loading farmers...
-            </p>
+            <TableSkeleton
+              label="Loading farmers"
+              columns={["Full name", "Barangay", "Contact", "Farms", "Actions"]}
+              tableClassName="min-w-[640px]"
+            />
           ) : listError ? (
             <p role="alert" className="gov-alert gov-alert-error mt-4">
               {listError}

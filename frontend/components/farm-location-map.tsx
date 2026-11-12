@@ -3,17 +3,14 @@
 import { Component, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 
+import { MapCanvasLoading } from "@/components/skeleton";
 import type { FarmCoordinates } from "@/lib/farm-location";
 
 const FarmLocationMapClient = dynamic(
   () => import("@/components/farm-location-map-client"),
   {
     ssr: false,
-    loading: () => (
-      <div className="gov-map-message gov-map-loading" role="status">
-        Loading map...
-      </div>
-    ),
+    loading: () => <MapCanvasLoading label="Loading map" small />,
   },
 );
 

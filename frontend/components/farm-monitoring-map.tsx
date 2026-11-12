@@ -11,16 +11,13 @@ import {
   type FarmMapFarm,
   type FarmMapFilter,
 } from "@/lib/farm-map";
+import { MapCanvasLoading } from "@/components/skeleton";
 
 const FarmMonitoringMapClient = dynamic(
   () => import("@/components/farm-monitoring-map-client"),
   {
     ssr: false,
-    loading: () => (
-      <div className="gov-monitoring-map-message gov-map-loading" role="status">
-        Loading interactive map...
-      </div>
-    ),
+    loading: () => <MapCanvasLoading label="Loading interactive map" />,
   },
 );
 
