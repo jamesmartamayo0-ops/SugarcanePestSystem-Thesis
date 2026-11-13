@@ -10,6 +10,7 @@ import FarmMonitoringMap from "@/components/farm-monitoring-map";
 import { Icon, type IconName } from "@/components/icons";
 import { DashboardSummarySkeleton, MonitoringMapSkeleton } from "@/components/skeleton";
 import { PageHeader, SessionNotice } from "@/components/ui";
+import { canAccessPath } from "@/lib/access-control";
 import {
   DashboardRequestError,
   getDashboardSummary,
@@ -262,6 +263,7 @@ export default function DashboardPage() {
   }
 
   const isAdmin = auth.user.role === "ADMIN";
+  const role = auth.user.role;
 
   return (
     <main className="gov-page">
@@ -273,10 +275,12 @@ export default function DashboardPage() {
             : "Overview of the pest cases and field work within your assignments."
         }
         actions={
-          <Link href="/pest-cases#report-case" className="gov-button gov-button-primary">
-            <Icon name="plus" size={16} />
-            Report pest case
-          </Link>
+          isAdmin ? (
+            <Link href="/pest-cases#report-case" className="gov-button gov-button-primary">
+              <Icon name="plus" size={16} />
+              Report pest case
+            </Link>
+          ) : undefined
         }
       />
 
@@ -375,18 +379,27 @@ export default function DashboardPage() {
                     <ul className="gov-pipeline-list">
                       {group.items.map((item) => {
                         const count = summary.by_status[item.status];
+                        const content = (
+                          <>
+                            <span className={workflowBadgeClass(item.status)}>
+                              {workflowLabel(item.status)}
+                            </span>
+                            <span
+                              className={`gov-pipeline-count${count === 0 ? " gov-pipeline-count--zero" : ""}`}
+                            >
+                              {count}
+                            </span>
+                          </>
+                        );
                         return (
                           <li key={item.status}>
-                            <Link href={item.href} className="gov-pipeline-row">
-                              <span className={workflowBadgeClass(item.status)}>
-                                {workflowLabel(item.status)}
-                              </span>
-                              <span
-                                className={`gov-pipeline-count${count === 0 ? " gov-pipeline-count--zero" : ""}`}
-                              >
-                                {count}
-                              </span>
-                            </Link>
+                            {canAccessPath(role, item.href) ? (
+                              <Link href={item.href} className="gov-pipeline-row">
+                                {content}
+                              </Link>
+                            ) : (
+                              <div className="gov-pipeline-row">{content}</div>
+                            )}
                           </li>
                         );
                       })}
@@ -405,9 +418,11 @@ export default function DashboardPage() {
                     </h2>
                     <p className="gov-card-header-meta">Most recently updated pest cases.</p>
                   </div>
-                  <Link href="/pest-cases" className="gov-activity-link">
-                    All pest cases
-                  </Link>
+                  {isAdmin && (
+                    <Link href="/pest-cases" className="gov-activity-link">
+                      All pest cases
+                    </Link>
+                  )}
                 </div>
                 {summary.recent_cases.length === 0 ? (
                   <div className="gov-card-body">
@@ -429,13 +444,15 @@ export default function DashboardPage() {
                           <span className={workflowBadgeClass(entry.status)}>
                             {workflowLabel(entry.status)}
                           </span>
-                          <Link
-                            href={`/pest-cases/${entry.id}`}
-                            className="gov-button gov-button-secondary gov-button-compact"
-                          >
-                            <Icon name="history" size={15} />
-                            Case record<span className="sr-only"> for case #{entry.id}</span>
-                          </Link>
+                          {isAdmin && (
+                            <Link
+                              href={`/pest-cases/${entry.id}`}
+                              className="gov-button gov-button-secondary gov-button-compact"
+                            >
+                              <Icon name="history" size={15} />
+                              Case record<span className="sr-only"> for case #{entry.id}</span>
+                            </Link>
+                          )}
                         </div>
                       </li>
                     ))}
@@ -529,7 +546,7 @@ export default function DashboardPage() {
                 </div>
               ))}
             </dl>
-            <FarmMonitoringMap farms={farmMap.farms} />
+            <FarmMonitoringMap farms={farmMap.farms} showRecordLinks={isAdmin} />
           </>
         ) : null}
       </section>

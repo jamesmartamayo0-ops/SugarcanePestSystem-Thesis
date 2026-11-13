@@ -43,6 +43,12 @@ from app.scoping import (
     can_view_farm,
 )
 
+# Pest Case Records are office administration. Listing, reading, creating,
+# editing, evidence intake, submission, scheduling, and the case timeline are
+# ADMIN-only. TECHNICIAN keeps only the operational endpoints its assigned
+# field work depends on, each still limited by the scoped case lookup:
+# reading evidence photos and starting an intervention. Technicians read the
+# initial report through the assigned inspection, not through these routes.
 pest_cases_bp = Blueprint("pest_cases", __name__, url_prefix="/api/v1/pest-cases")
 
 # Transaction-scoped advisory lock serializing REPORTED -> FOR_INSPECTION
@@ -346,7 +352,7 @@ def _no_store_pest_cases_response(response):
 @pest_cases_bp.get("")
 @pest_cases_bp.get("/")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def list_pest_cases():
     farm_id, farmer_id, status, search, reported_from, reported_to, invalid = _parse_filter_args()
     if invalid is not None:
@@ -367,7 +373,7 @@ def list_pest_cases():
 
 @pest_cases_bp.get("/<int:case_id>")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def get_pest_case(case_id: int):
     try:
         case = get_pest_case_by_id(case_id)
@@ -386,7 +392,7 @@ def get_pest_case(case_id: int):
 @pest_cases_bp.post("")
 @pest_cases_bp.post("/")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def create_pest_case():
     if not request.is_json or (
         request.content_length is not None and request.content_length > 4096
@@ -450,7 +456,7 @@ def create_pest_case():
 
 @pest_cases_bp.put("/<int:case_id>")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def update_pest_case(case_id: int):
     if not request.is_json or (
         request.content_length is not None and request.content_length > 4096
@@ -590,7 +596,7 @@ def get_case_evidence_photo(case_id: int, photo_id: int):
 
 @pest_cases_bp.post("/<int:case_id>/evidence-photos")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def upload_evidence_photos(case_id: int):
     if evidence.storage_mode() != evidence.LOCAL:
         return auth_error("Direct evidence upload is required.", 409)
@@ -726,7 +732,7 @@ def get_evidence_photo(case_id: int, photo_id: int):
 
 @pest_cases_bp.get("/<int:case_id>/evidence-photos/config")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def evidence_photo_config(case_id: int):
     try:
         case = get_pest_case_by_id(case_id)
@@ -754,7 +760,7 @@ def evidence_photo_config(case_id: int):
 
 @pest_cases_bp.post("/<int:case_id>/evidence-photos/upload-authorize")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def authorize_evidence_upload(case_id: int):
     if evidence.storage_mode() != evidence.BLOB:
         return auth_error("Direct evidence upload is not enabled.", 409)
@@ -808,7 +814,7 @@ def _delete_blob_evidence(
 
 @pest_cases_bp.post("/<int:case_id>/evidence-photos/finalize")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def finalize_evidence_photos(case_id: int):
     if evidence.storage_mode() != evidence.BLOB:
         return auth_error("Direct evidence upload is not enabled.", 409)
@@ -971,7 +977,7 @@ def authorize_evidence_download(case_id: int, photo_id: int):
 
 @pest_cases_bp.post("/<int:case_id>/submit-for-inspection")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def submit_for_inspection(case_id: int):
     if request.data:
         if not request.is_json:
@@ -1608,7 +1614,7 @@ def build_case_timeline(case: PestCase) -> list:
 
 @pest_cases_bp.get("/<int:case_id>/timeline")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def get_pest_case_timeline(case_id: int):
     try:
         case = get_pest_case_by_id(case_id)

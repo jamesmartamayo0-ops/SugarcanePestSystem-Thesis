@@ -402,12 +402,13 @@ def test_real_duplicate_plot_unique_constraint(integration_app, create_integrati
         cleanup_demo_rows(integration_app)
 
 
-def test_real_technician_farm_access_is_scoped(integration_app, create_integration_user):
+def test_real_technician_cannot_use_farmer_or_farm_records(integration_app, create_integration_user):
     _, admin_name = create_integration_user(role=UserRole.ADMIN)
     _, tech_name = create_integration_user(role=UserRole.TECHNICIAN)
     admin_client = integration_app.test_client()
     admin_token = login(admin_client, admin_name).get_json()["data"]["csrf_token"]
     farmer_name = demo_name("farmer")
+    plot = f"itest_{uuid4().hex}"
     try:
         farmer_id = (
             admin_client.post(
@@ -417,25 +418,61 @@ def test_real_technician_farm_access_is_scoped(integration_app, create_integrati
             )
             .get_json()["data"]["farmer"]["id"]
         )
+        farm_id = (
+            admin_client.post(
+                FARMS,
+                json={
+                    "farmer_id": farmer_id,
+                    "plot_identifier": plot,
+                    "barangay": "Taclobo",
+                    "area_hectares": 1.5,
+                },
+                headers=auth_headers(admin_token),
+            )
+            .get_json()["data"]["farm"]["id"]
+        )
 
         tech_client = integration_app.test_client()
         tech_token = login(tech_client, tech_name).get_json()["data"]["csrf_token"]
         tech_headers = auth_headers(tech_token)
-        assert tech_client.get(FARMERS).status_code == 200
-        assert tech_client.get(f"{FARMERS}/{farmer_id}").status_code == 404
-        assert tech_client.get(FARMS).status_code == 200
-        created = tech_client.post(
-            FARMS,
-            json={
-                "farmer_id": farmer_id,
-                "plot_identifier": f"itest_{uuid4().hex}",
-                "barangay": "Taclobo",
-                "area_hectares": 1.5,
-            },
-            headers=tech_headers,
-        )
-        assert created.status_code == 201
-        assert tech_client.get(FARMS + "?farmer_id=abc").status_code == 400
+        denied = [
+            tech_client.get(FARMERS),
+            tech_client.get(f"{FARMERS}/{farmer_id}"),
+            tech_client.post(
+                FARMERS,
+                json={"full_name": demo_name("farmer"), "barangay": "Taclobo"},
+                headers=tech_headers,
+            ),
+            tech_client.put(
+                f"{FARMERS}/{farmer_id}", json={"barangay": "Bunao"}, headers=tech_headers
+            ),
+            tech_client.get(FARMS),
+            tech_client.get(f"{FARMS}?farmer_id={farmer_id}"),
+            tech_client.get(f"{FARMS}/{farm_id}"),
+            tech_client.post(
+                FARMS,
+                json={
+                    "farmer_id": farmer_id,
+                    "plot_identifier": f"itest_{uuid4().hex}",
+                    "barangay": "Taclobo",
+                    "area_hectares": 1.5,
+                },
+                headers=tech_headers,
+            ),
+            tech_client.put(
+                f"{FARMS}/{farm_id}", json={"area_hectares": 1}, headers=tech_headers
+            ),
+        ]
+        for response in denied:
+            assert response.status_code == 403
+            assert response.get_json() == {"data": None, "message": "Permission denied."}
+
+        # Nothing the technician attempted reached the database.
+        farmer = admin_client.get(f"{FARMERS}/{farmer_id}").get_json()["data"]["farmer"]
+        assert farmer["barangay"] == "Taclobo"
+        assert [farm["plot_identifier"] for farm in farmer["farms"]] == [plot]
+        farm = admin_client.get(f"{FARMS}/{farm_id}").get_json()["data"]["farm"]
+        assert farm["area_hectares"] == 1.5
     finally:
         cleanup_demo_rows(integration_app)
 

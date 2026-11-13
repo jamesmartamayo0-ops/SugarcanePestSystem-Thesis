@@ -193,9 +193,9 @@ def test_unauthenticated_farmer_and_farm_endpoints_return_401(farm_case):
     assert client.put(FARM(1), json={}, headers={"Origin": ORIGIN}).status_code == 401
 
 
-def test_technician_can_use_farmer_and_farm_workflow(farm_case):
-    client, _, _, _ = farm_case
-    token = login_technician(client)
+def test_admin_can_use_farmer_and_farm_workflow(farm_case):
+    client, farmer_store, farm_store, _ = farm_case
+    token = login_admin(client)
     headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
     assert client.get(FARMERS).status_code == 200
     assert client.get(FARMER(1)).status_code == 200
@@ -207,12 +207,60 @@ def test_technician_can_use_farmer_and_farm_workflow(farm_case):
         headers=headers,
     )
     assert response.status_code == 201
+    assert client.put(FARMER(1), json={"barangay": "Taclobo"}, headers=headers).status_code == 200
     response = client.post(
         FARMS,
         json={"farmer_id": 1, "plot_identifier": "Plot C", "barangay": "Bunao", "area_hectares": 3},
         headers=headers,
     )
     assert response.status_code == 201
+    assert client.put(FARM(1), json={"area_hectares": 2}, headers=headers).status_code == 200
+    assert len(farmer_store) == 2
+    assert len(farm_store) == 3
+
+
+def _assert_permission_denied(response):
+    assert response.status_code == 403
+    assert response.get_json() == {"data": None, "message": "Permission denied."}
+
+
+def test_technician_cannot_use_farmer_or_farm_records(farm_case):
+    client, farmer_store, farm_store, _ = farm_case
+    token = login_technician(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    before_farmer = (farmer_store[1].full_name, farmer_store[1].barangay)
+    before_farm = (farm_store[1].plot_identifier, farm_store[1].area_hectares)
+
+    _assert_permission_denied(client.get(FARMERS))
+    _assert_permission_denied(client.get(FARMER(1)))
+    _assert_permission_denied(
+        client.post(
+            FARMERS,
+            json={"full_name": "Maria Santos", "barangay": "Taclobo"},
+            headers=headers,
+        )
+    )
+    _assert_permission_denied(
+        client.put(FARMER(1), json={"full_name": "Changed"}, headers=headers)
+    )
+    _assert_permission_denied(client.get(FARMS))
+    _assert_permission_denied(client.get(f"{FARMS}?farmer_id=1"))
+    _assert_permission_denied(client.get(FARM(1)))
+    _assert_permission_denied(
+        client.post(
+            FARMS,
+            json={"farmer_id": 1, "plot_identifier": "Plot C", "barangay": "Bunao", "area_hectares": 3},
+            headers=headers,
+        )
+    )
+    _assert_permission_denied(
+        client.put(FARM(1), json={"plot_identifier": "Changed"}, headers=headers)
+    )
+
+    assert len(farmer_store) == 1
+    assert len(farm_store) == 2
+    assert (farmer_store[1].full_name, farmer_store[1].barangay) == before_farmer
+    assert (farm_store[1].plot_identifier, farm_store[1].area_hectares) == before_farm
 
 
 def test_unsafe_requests_require_origin_and_csrf(farm_case):

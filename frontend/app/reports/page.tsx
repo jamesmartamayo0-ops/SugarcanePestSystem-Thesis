@@ -16,6 +16,7 @@ import {
   type OperationalReport,
 } from "@/lib/reports";
 import type { PestCaseStatus } from "@/lib/pest-cases";
+import { accessibleLinks } from "@/lib/access-control";
 
 // Rendering only: date-only values retain their calendar day; timestamps use Manila time.
 function formatRecordDate(value: string | null): string {
@@ -70,6 +71,8 @@ export default function ReportsPage() {
   const [reportedTo, setReportedTo] = useState<string>("");
 
   const authenticated = auth.status === "authenticated";
+  const role = auth.status === "authenticated" ? auth.user.role : null;
+  const isAdmin = role === "ADMIN";
 
   useEffect(() => {
     if (auth.status === "unauthenticated") {
@@ -195,10 +198,10 @@ export default function ReportsPage() {
       <PageHeader
         title="Operational Reports"
         description="Factual workflow counts and case rows. No treatment-effectiveness scoring."
-        related={[
+        related={accessibleLinks(role, [
           { href: "/pest-cases", label: "Pest Cases" },
           { href: "/follow-ups", label: "Follow-ups" },
-        ]}
+        ])}
         actions={
           <button
             type="button"
@@ -509,13 +512,15 @@ export default function ReportsPage() {
                             </span>
                           </td>
                           <td className="gov-col-actions gov-no-print">
-                            <Link
-                              href={`/pest-cases/${entry.case_id}`}
-                              className="gov-button gov-button-secondary gov-button-compact"
-                            >
-                              <Icon name="history" size={15} />
-                              Case record<span className="sr-only"> for case #{entry.case_id}</span>
-                            </Link>
+                            {isAdmin && (
+                              <Link
+                                href={`/pest-cases/${entry.case_id}`}
+                                className="gov-button gov-button-secondary gov-button-compact"
+                              >
+                                <Icon name="history" size={15} />
+                                Case record<span className="sr-only"> for case #{entry.case_id}</span>
+                              </Link>
+                            )}
                           </td>
                         </tr>
                       ))}

@@ -13,6 +13,11 @@ operational records connected to their own assigned work:
 The rules are expressed as SQL clauses so every list, search, report, dashboard
 query, and farm-map projection applies the same scope in the database. Routes
 must not rely on the frontend to hide records.
+
+Farmer, Farm, and Pest Case Records themselves are ADMIN-only routes. For a
+technician these clauses scope the operational views (inspections,
+interventions, follow-ups, dashboard, reports, farm map, evidence reads) that
+carry the farmer, farm, and case context needed for assigned work.
 """
 
 from flask import g

@@ -10,6 +10,7 @@ from app.models import (
     Farm,
     Inspection,
     PestCase,
+    PestCaseEvidencePhoto,
     PestCaseStatus,
     User,
     UserRole,
@@ -19,6 +20,7 @@ from app.models import (
     normalize_validated_area,
     validate_scheduled_for,
 )
+from app.routes.pest_cases import _evidence_photo_payload
 from app.scoping import (
     apply_inspection_scope,
     can_act_on_assigned_work,
@@ -328,6 +330,51 @@ def get_inspection(inspection_id: int):
         return auth_error("Inspection not found.", 404)
     return jsonify(
         {"data": {"inspection": _inspection_detail(inspection)}, "message": "Inspection retrieved."}
+    )
+
+
+def list_case_evidence_photos(case_id: int):
+    return db.session.scalars(
+        select(PestCaseEvidencePhoto)
+        .where(PestCaseEvidencePhoto.pest_case_id == case_id)
+        .order_by(PestCaseEvidencePhoto.id)
+    ).all()
+
+
+def _initial_report_payload(case: PestCase, photos) -> dict:
+    return {
+        "id": case.id,
+        "pest_name": case.pest_name,
+        "symptoms": case.symptoms,
+        "observed_on": _iso(case.observed_on),
+        "reported_at": _iso(case.reported_at),
+        "reported_area_hectares": float(case.reported_area_hectares),
+        "evidence_photos": [_evidence_photo_payload(photo) for photo in photos],
+    }
+
+
+@inspections_bp.get("/<int:inspection_id>/initial-report")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def get_inspection_initial_report(inspection_id: int):
+    """The case's initial report, read through the inspection it belongs to.
+
+    Pest Case Records are ADMIN-only; this is the scoped operational view an
+    assigned technician needs in the field (observation and evidence). It is
+    authorized by the inspection, so an unassigned technician gets 404.
+    """
+    try:
+        inspection = get_inspection_by_id(inspection_id)
+        if inspection is None or not can_view_inspection(g.current_user, inspection):
+            return auth_error("Inspection not found.", 404)
+        case = inspection.pest_case
+        payload = _initial_report_payload(case, list_case_evidence_photos(case.id))
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Inspection initial report lookup failed.")
+        return auth_error("Inspection service unavailable.", 503)
+    return jsonify(
+        {"data": {"initial_report": payload}, "message": "Initial report retrieved."}
     )
 
 

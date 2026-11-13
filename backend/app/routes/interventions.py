@@ -15,7 +15,9 @@ from app.models.intervention import (
     normalize_performed_on,
     normalize_scheduled_for as normalize_intervention_scheduled_for,
 )
+from app.routes.pest_cases import _pest_case_summary
 from app.scoping import (
+    apply_case_scope,
     apply_intervention_scope,
     can_act_on_assigned_work,
     can_view_intervention,
@@ -294,6 +296,45 @@ def list_interventions():
         current_app.logger.error("Intervention list failed.")
         return auth_error("Intervention service unavailable.", 503)
     return jsonify({"data": {"interventions": payload}, "message": "Interventions retrieved."})
+
+
+_INTERVENTION_ELIGIBLE_STATUSES = (
+    PestCaseStatus.FIELD_VALIDATED.value,
+    PestCaseStatus.REINTERVENTION_REQUIRED.value,
+)
+
+
+def list_intervention_eligible_cases(user=None):
+    return db.session.scalars(
+        apply_case_scope(
+            select(PestCase)
+            .where(PestCase.status.in_(_INTERVENTION_ELIGIBLE_STATUSES))
+            .order_by(PestCase.id),
+            user,
+        )
+    ).all()
+
+
+@interventions_bp.get("/eligible-cases")
+@login_required
+@roles_required("ADMIN", "TECHNICIAN")
+def list_eligible_cases():
+    """Cases waiting for an intervention plan, within the caller's case scope.
+
+    The general Pest Case list is ADMIN-only. This operational list returns
+    only Field Validated and Reintervention Required cases, and a technician
+    only sees the ones connected to their own assigned work.
+    """
+    try:
+        cases = list_intervention_eligible_cases()
+        payload = [_pest_case_summary(case) for case in cases]
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.error("Intervention eligible case list failed.")
+        return auth_error("Intervention service unavailable.", 503)
+    return jsonify(
+        {"data": {"pest_cases": payload}, "message": "Eligible cases retrieved."}
+    )
 
 
 @interventions_bp.get("/<int:intervention_id>")

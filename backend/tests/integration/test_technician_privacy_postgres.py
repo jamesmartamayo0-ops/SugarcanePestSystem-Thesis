@@ -31,6 +31,7 @@ FARMERS = "/api/v1/farmers"
 FARMS = "/api/v1/farms"
 INSPECTIONS = "/api/v1/inspections"
 INTERVENTIONS = "/api/v1/interventions"
+ELIGIBLE = "/api/v1/interventions/eligible-cases"
 FOLLOW_UPS = "/api/v1/follow-ups"
 DASHBOARD = "/api/v1/dashboard/summary"
 FARM_MAP = "/api/v1/dashboard/farm-map"
@@ -183,6 +184,7 @@ def privacy_env(integration_app):
                 "pest_name": case.pest_name,
                 "farmer_name": farmer.full_name,
                 "plot_identifier": farm.plot_identifier,
+                "symptoms": case.symptoms,
             }
 
         chain_a = seed_chain("a", users["tech_a"], "9.600001", "123.100001")
@@ -244,6 +246,18 @@ def _ids(entries):
     return {entry["id"] for entry in entries}
 
 
+DENIED = {"data": None, "message": "Permission denied."}
+
+
+def _assert_denied(response):
+    assert response.status_code == 403
+    assert response.get_json() == DENIED
+
+
+def _initial_report(inspection_id):
+    return f"{INSPECTIONS}/{inspection_id}/initial-report"
+
+
 def test_admin_retains_office_wide_access(privacy_env):
     client = _client_for(privacy_env, "admin")
     a = privacy_env["a"]
@@ -285,25 +299,43 @@ def test_admin_retains_office_wide_access(privacy_env):
     assert map_farms[b["farm_id"]]["location"] is not None
 
 
-def test_technician_a_sees_assigned_case_only(privacy_env):
+def test_technician_a_reads_assigned_case_only_through_its_inspection(privacy_env):
     client = _client_for(privacy_env, "tech_a")
     a = privacy_env["a"]
     b = privacy_env["b"]
 
-    cases = client.get(CASES).get_json()["data"]["pest_cases"]
-    assert [case["id"] for case in cases] == [a["case_id"]]
-    assert client.get(f"{CASES}/{a['case_id']}").status_code == 200
-    assert client.get(f"{CASES}/{b['case_id']}").status_code == 404
-    assert client.get(f"{CASES}/{b['case_id']}/timeline").status_code == 404
+    # Pest Case Records are ADMIN-only, even for the technician's own case.
+    _assert_denied(client.get(CASES))
+    _assert_denied(client.get(f"{CASES}/{a['case_id']}"))
+    _assert_denied(client.get(f"{CASES}/{b['case_id']}"))
+    _assert_denied(client.get(f"{CASES}/{a['case_id']}/timeline"))
+    _assert_denied(client.get(f"{CASES}/{b['case_id']}/timeline"))
+
+    # The assigned inspection carries the scoped case context instead.
+    report = client.get(_initial_report(a["inspection_id"]))
+    assert report.status_code == 200
+    body = report.get_json()["data"]["initial_report"]
+    assert body["id"] == a["case_id"]
+    assert body["pest_name"] == a["pest_name"]
+    assert body["symptoms"] == a["symptoms"]
+    assert body["evidence_photos"] == []
+    detail = client.get(f"{INSPECTIONS}/{a['inspection_id']}").get_json()["data"]["inspection"]
+    assert detail["pest_case"]["farm"]["plot_identifier"] == a["plot_identifier"]
+    assert detail["pest_case"]["farm"]["farmer"]["full_name"] == a["farmer_name"]
+
+    unrelated = client.get(_initial_report(b["inspection_id"]))
+    assert unrelated.status_code == 404
+    assert b["symptoms"] not in unrelated.get_data(as_text=True)
 
 
 def test_technician_a_cannot_directly_open_unrelated_records(privacy_env):
     client = _client_for(privacy_env, "tech_a")
     b = privacy_env["b"]
 
-    assert client.get(f"{FARMERS}/{b['farmer_id']}").status_code == 404
-    assert client.get(f"{FARMS}/{b['farm_id']}").status_code == 404
+    _assert_denied(client.get(f"{FARMERS}/{b['farmer_id']}"))
+    _assert_denied(client.get(f"{FARMS}/{b['farm_id']}"))
     assert client.get(f"{INSPECTIONS}/{b['inspection_id']}").status_code == 404
+    assert client.get(_initial_report(b["inspection_id"])).status_code == 404
     assert client.get(f"{INTERVENTIONS}/{b['intervention_id']}").status_code == 404
     assert client.get(f"{FOLLOW_UPS}/{b['follow_up_id']}").status_code == 404
 
@@ -313,14 +345,11 @@ def test_technician_a_lists_hide_unrelated_records(privacy_env):
     a = privacy_env["a"]
     b = privacy_env["b"]
 
-    farmers = client.get(FARMERS).get_json()["data"]["farmers"]
-    assert [farmer["id"] for farmer in farmers] == [a["farmer_id"]]
-    assert b["farmer_id"] not in {farmer["id"] for farmer in farmers}
-    assert all(farmer["farm_count"] == 1 for farmer in farmers)
-
-    farms = client.get(FARMS).get_json()["data"]["farms"]
-    assert [farm["id"] for farm in farms] == [a["farm_id"]]
-    assert b["farm_id"] not in {farm["id"] for farm in farms}
+    # Farmer and Farm Records are ADMIN-only, including the technician's own.
+    _assert_denied(client.get(FARMERS))
+    _assert_denied(client.get(f"{FARMERS}/{a['farmer_id']}"))
+    _assert_denied(client.get(FARMS))
+    _assert_denied(client.get(f"{FARMS}/{a['farm_id']}"))
 
     inspections = client.get(INSPECTIONS).get_json()["data"]["inspections"]
     assert [item["id"] for item in inspections] == [a["inspection_id"]]
@@ -331,14 +360,53 @@ def test_technician_a_lists_hide_unrelated_records(privacy_env):
     follow_ups = client.get(FOLLOW_UPS).get_json()["data"]["follow_ups"]
     assert [item["id"] for item in follow_ups] == [a["follow_up_id"]]
 
-    # Filters cannot widen the scope.
-    assert client.get(f"{CASES}?farm_id={b['farm_id']}").get_json()["data"][
-        "pest_cases"
-    ] == []
-    assert client.get(f"{CASES}?farmer_id={b['farmer_id']}").get_json()["data"][
-        "pest_cases"
-    ] == []
+    # Filters cannot widen the scope or reopen the administration lists.
+    _assert_denied(client.get(f"{CASES}?farm_id={b['farm_id']}"))
+    _assert_denied(client.get(f"{CASES}?farmer_id={b['farmer_id']}"))
+    _assert_denied(client.get(f"{FARMS}?farmer_id={b['farmer_id']}"))
+    assert client.get(f"{INSPECTIONS}?pest_case_id={b['case_id']}").get_json()[
+        "data"
+    ]["inspections"] == []
     assert client.get(f"{INSPECTIONS}?assigned_to_user_id=0").status_code == 400
+
+
+def test_intervention_eligible_cases_are_scoped(privacy_env):
+    a = privacy_env["a"]
+    b = privacy_env["b"]
+    ours = {a["case_id"], b["case_id"]}
+    app = privacy_env["app"]
+
+    def set_status(status):
+        with app.app_context():
+            assert (
+                db.session.scalar(text("SELECT current_database()"))
+                == "sugarcane_pest_test"
+            )
+            db.session.execute(
+                PestCase.__table__.update()
+                .where(PestCase.id.in_(list(ours)))
+                .values(status=status)
+            )
+            db.session.commit()
+            db.session.remove()
+
+    set_status("FIELD_VALIDATED")
+    try:
+        tech_a = _client_for(privacy_env, "tech_a")
+        eligible = tech_a.get(ELIGIBLE)
+        assert eligible.status_code == 200
+        assert _ids(eligible.get_json()["data"]["pest_cases"]) == {a["case_id"]}
+        assert b["pest_name"] not in eligible.get_data(as_text=True)
+
+        tech_b = _client_for(privacy_env, "tech_b")
+        assert _ids(tech_b.get(ELIGIBLE).get_json()["data"]["pest_cases"]) == {
+            b["case_id"]
+        }
+
+        admin = _client_for(privacy_env, "admin")
+        assert ours <= _ids(admin.get(ELIGIBLE).get_json()["data"]["pest_cases"])
+    finally:
+        set_status("CLOSED")
 
 
 def test_technician_a_search_cannot_reveal_case_b(privacy_env):
@@ -352,8 +420,8 @@ def test_technician_a_search_cannot_reveal_case_b(privacy_env):
         str(b["case_id"]),
     ):
         response = client.get(CASES, query_string={"q": query})
-        assert response.status_code == 200
-        assert response.get_json()["data"]["pest_cases"] == []
+        _assert_denied(response)
+        assert b["pest_name"] not in response.get_data(as_text=True)
 
     admin = _client_for(privacy_env, "admin")
     found = admin.get(CASES, query_string={"q": b["pest_name"]}).get_json()["data"][
@@ -413,12 +481,17 @@ def test_technician_b_has_equivalent_isolation(privacy_env):
     a = privacy_env["a"]
     b = privacy_env["b"]
 
-    cases = client.get(CASES).get_json()["data"]["pest_cases"]
-    assert [case["id"] for case in cases] == [b["case_id"]]
-    assert client.get(f"{CASES}/{b['case_id']}").status_code == 200
-    assert client.get(f"{CASES}/{a['case_id']}").status_code == 404
-    assert client.get(f"{FARMERS}/{a['farmer_id']}").status_code == 404
-    assert client.get(f"{FARMS}/{a['farm_id']}").status_code == 404
+    _assert_denied(client.get(CASES))
+    _assert_denied(client.get(f"{CASES}/{b['case_id']}"))
+    _assert_denied(client.get(f"{CASES}/{a['case_id']}"))
+    _assert_denied(client.get(FARMERS))
+    _assert_denied(client.get(f"{FARMERS}/{a['farmer_id']}"))
+    _assert_denied(client.get(FARMS))
+    _assert_denied(client.get(f"{FARMS}/{a['farm_id']}"))
+    own_report = client.get(_initial_report(b["inspection_id"]))
+    assert own_report.status_code == 200
+    assert own_report.get_json()["data"]["initial_report"]["id"] == b["case_id"]
+    assert client.get(_initial_report(a["inspection_id"])).status_code == 404
     assert client.get(f"{INSPECTIONS}/{a['inspection_id']}").status_code == 404
     assert client.get(f"{INTERVENTIONS}/{a['intervention_id']}").status_code == 404
     assert client.get(f"{FOLLOW_UPS}/{a['follow_up_id']}").status_code == 404

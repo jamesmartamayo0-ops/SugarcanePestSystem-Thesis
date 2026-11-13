@@ -2,6 +2,8 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 
 import { Icon } from "@/components/icons";
+import { canAccessPath } from "@/lib/access-control";
+import type { UserRole } from "@/lib/auth";
 
 /*
  * Presentation of the existing case lifecycle. Stages mirror the workflow
@@ -30,7 +32,13 @@ const STAGES: Stage[] = [
 const STEP_COUNT_STYLE = { "--step-count": STAGES.length } as CSSProperties;
 
 /** Page-level guide: shows where the current page sits in the lifecycle. */
-export function WorkflowSteps({ current }: { current: WorkflowArea }) {
+export function WorkflowSteps({
+  current,
+  role,
+}: {
+  current: WorkflowArea;
+  role: UserRole | null;
+}) {
   return (
     <nav aria-label="Case workflow" className="gov-steps">
       <div className="gov-steps-head">
@@ -55,7 +63,7 @@ export function WorkflowSteps({ current }: { current: WorkflowArea }) {
           );
           return (
             <li key={stage.key} className={`gov-step${isCurrent ? " gov-step--current" : ""}`}>
-              {stage.href && !isCurrent ? (
+              {stage.href && !isCurrent && canAccessPath(role, stage.href) ? (
                 <Link href={stage.href} className="gov-step-inner">
                   {content}
                 </Link>

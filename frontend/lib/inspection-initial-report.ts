@@ -10,7 +10,8 @@ export type InitialReportSource = {
 };
 
 // The Pest Case remains the owner of the initial report; the Inspection only
-// displays it. Fetched through the existing scoped pest-case endpoint.
+// displays it. Fetched through the scoped inspection initial-report endpoint,
+// because Pest Case Records are Administrator-only.
 export type InitialReportCaseRecord = {
   id: number;
   symptoms: string | null;

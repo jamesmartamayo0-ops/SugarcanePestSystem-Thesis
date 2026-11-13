@@ -218,9 +218,9 @@ def test_unauthenticated_pest_case_endpoints_return_401(pest_case):
     assert client.post(SUBMIT(1), json={}, headers={"Origin": ORIGIN}).status_code == 401
 
 
-def test_technician_can_manage_pest_cases(pest_case):
-    client, _, _, _ = pest_case
-    token = login_technician(client)
+def test_admin_can_manage_pest_cases(pest_case):
+    client, store, _, _ = pest_case
+    token = login_admin(client)
     headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
     assert client.get(CASES).status_code == 200
     assert client.get(CASE(1)).status_code == 200
@@ -232,6 +232,70 @@ def test_technician_can_manage_pest_cases(pest_case):
     assert response.status_code == 201
     assert client.put(CASE(2), json={"pest_name": "White Grub Larva"}, headers=headers).status_code == 200
     assert client.post(SUBMIT(2), headers=headers).status_code == 200
+    assert store[2].status == PestCaseStatus.FOR_INSPECTION.value
+    assert client.get(f"{PHOTOS(1)}/config").status_code == 200
+
+
+def _assert_permission_denied(response):
+    assert response.status_code == 403
+    assert response.get_json() == {"data": None, "message": "Permission denied."}
+
+
+@pytest.mark.parametrize("login_as", ["tech.one", "tech.two"])
+def test_technician_cannot_manage_pest_case_records(pest_case, login_as):
+    # tech.one is the reporter/assignee in this fixture's scope fake, tech.two
+    # is unrelated. Neither may use the Pest Case administration endpoints.
+    client, store, _, _ = pest_case
+    password = TECH_PASSWORD if login_as == "tech.one" else TECH2_PASSWORD
+    response = login(client, login_as, password)
+    assert response.status_code == 200
+    token = response.get_json()["data"]["csrf_token"]
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+    before = (len(store), store[1].status, store[1].pest_name)
+
+    _assert_permission_denied(client.get(CASES))
+    _assert_permission_denied(client.get(f"{CASES}?status=FOR_INSPECTION"))
+    _assert_permission_denied(client.get(CASE(1)))
+    _assert_permission_denied(client.get(f"{CASE(1)}/timeline"))
+    _assert_permission_denied(
+        client.post(
+            CASES,
+            json={"farm_id": 1, "pest_name": "White Grub", "reported_area_hectares": 1},
+            headers=headers,
+        )
+    )
+    _assert_permission_denied(
+        client.put(CASE(1), json={"pest_name": "Changed"}, headers=headers)
+    )
+    _assert_permission_denied(client.post(SUBMIT(1), headers=headers))
+    _assert_permission_denied(
+        client.post(
+            f"{CASE(1)}/schedule-inspection",
+            json={"scheduled_for": "2026-10-20", "assigned_to_user_id": 2},
+            headers=headers,
+        )
+    )
+    _assert_permission_denied(client.get(f"{PHOTOS(1)}/config"))
+    _assert_permission_denied(
+        client.post(
+            PHOTOS(1),
+            data={"photos": (io.BytesIO(PNG_BYTES), "evidence.png")},
+            headers=headers,
+            content_type="multipart/form-data",
+        )
+    )
+    _assert_permission_denied(
+        client.post(f"{PHOTOS(1)}/upload-authorize", json={}, headers=headers)
+    )
+    _assert_permission_denied(
+        client.post(
+            f"{PHOTOS(1)}/finalize",
+            json={"photos": [{"pathname": "ev/1/x.png", "original_filename": "x.png"}]},
+            headers=headers,
+        )
+    )
+
+    assert (len(store), store[1].status, store[1].pest_name) == before
 
 
 def test_unsafe_requests_require_origin_and_csrf(pest_case):
@@ -301,7 +365,7 @@ def test_list_shape_filters_and_detail(pest_case):
 
 def test_create_case_records_reporter_and_reported_status(pest_case):
     client, store, _, _ = pest_case
-    token = login_technician(client)
+    token = login_admin(client)
     response = client.post(
         CASES,
         json={
@@ -318,9 +382,9 @@ def test_create_case_records_reporter_and_reported_status(pest_case):
     body = response.get_json()["data"]["pest_case"]
     assert body["pest_name"] == "Asiatic Corn Borer"
     assert body["status"] == "REPORTED"
-    assert body["reporter"]["id"] == 2
+    assert body["reporter"]["id"] == 1
     assert body["reported_at"].startswith("2026-10-09")
-    assert store[body["id"]].reported_by_user_id == 2
+    assert store[body["id"]].reported_by_user_id == 1
     assert store[body["id"]].reported_area_hectares == Decimal("3.75")
 
 
@@ -340,7 +404,7 @@ def test_create_case_without_optional_fields(pest_case):
 
 def test_create_case_without_suspected_pest_is_valid(pest_case):
     client, store, _, _ = pest_case
-    token = login_technician(client)
+    token = login_admin(client)
     symptoms = "Naay buslot sa stem ug nag-yellow ang ubang dahon."
     response = client.post(
         CASES,
@@ -369,7 +433,7 @@ def test_create_case_without_suspected_pest_is_valid(pest_case):
 
 def test_create_case_with_known_suspected_pest_preserved(pest_case):
     client, store, _, _ = pest_case
-    token = login_technician(client)
+    token = login_admin(client)
     response = client.post(
         CASES,
         json={"farm_id": 1, "pest_name": "  Stem   Borer ", "reported_area_hectares": 1},
@@ -383,7 +447,7 @@ def test_create_case_with_known_suspected_pest_preserved(pest_case):
 
 def test_create_case_blank_suspected_pest_is_unknown(pest_case):
     client, store, _, _ = pest_case
-    token = login_technician(client)
+    token = login_admin(client)
     response = client.post(
         CASES,
         json={"farm_id": 1, "pest_name": "   ", "reported_area_hectares": 1},
@@ -440,7 +504,7 @@ def test_valid_evidence_photo_upload_and_view(pest_case, monkeypatch, tmp_path):
     client, _, _, _ = pest_case
     client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
     photo_store = _install_evidence_store(monkeypatch)
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _upload(client, token)
     assert response.status_code == 201
@@ -448,7 +512,7 @@ def test_valid_evidence_photo_upload_and_view(pest_case, monkeypatch, tmp_path):
     assert len(photos) == 1
     assert photos[0]["original_filename"] == "evidence.png"
     assert photos[0]["content_type"] == "image/png"
-    assert photo_store[0].uploaded_by_user_id == 2
+    assert photo_store[0].uploaded_by_user_id == 1
     assert len(list(tmp_path.iterdir())) == 1
 
     photo_id = photos[0]["id"]
@@ -462,7 +526,7 @@ def test_evidence_photo_invalid_type_rejected(pest_case, monkeypatch, tmp_path):
     client, _, _, _ = pest_case
     client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
     _install_evidence_store(monkeypatch)
-    token = login_technician(client)
+    token = login_admin(client)
     response = _upload(client, token, filename="notes.txt", data=b"not an image")
     assert response.status_code == 400
     assert "JPEG, PNG, or WebP" in response.get_json()["message"]
@@ -473,7 +537,7 @@ def test_evidence_photo_over_limit_rejected(pest_case, monkeypatch, tmp_path):
     client, _, _, _ = pest_case
     client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
     _install_evidence_store(monkeypatch)
-    token = login_technician(client)
+    token = login_admin(client)
     oversized = b"\xff\xd8\xff" + b"0" * (5 * 1024 * 1024)
     response = _upload(client, token, data=oversized)
     assert response.status_code == 400
@@ -485,7 +549,7 @@ def test_more_than_three_evidence_photos_rejected(pest_case, monkeypatch, tmp_pa
     client, _, _, _ = pest_case
     client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
     _install_evidence_store(monkeypatch)
-    token = login_technician(client)
+    token = login_admin(client)
     response = client.post(
         PHOTOS(1),
         data={
@@ -504,18 +568,27 @@ def test_more_than_three_evidence_photos_rejected(pest_case, monkeypatch, tmp_pa
     assert list(tmp_path.iterdir()) == []
 
 
-def test_unrelated_technician_cannot_view_evidence(pest_case, monkeypatch, tmp_path):
+def test_evidence_photo_read_is_scoped_for_technicians(pest_case, monkeypatch, tmp_path):
     client, _, _, _ = pest_case
     client.application.config["EVIDENCE_UPLOAD_DIR"] = str(tmp_path)
     _install_evidence_store(monkeypatch)
-    token = login_technician(client)
+    token = login_admin(client)
     upload = _upload(client, token)
     photo_id = upload.get_json()["data"]["pest_case"]["evidence_photos"][0]["id"]
 
+    # The fixture scopes case 1 to tech.one, standing in for assigned work.
+    assigned = client.application.test_client()
+    login_technician(assigned)
+    viewed = assigned.get(PHOTO(1, photo_id))
+    assert viewed.status_code == 200
+    assert viewed.data == PNG_BYTES
+    authorized = assigned.get(f"{PHOTO(1, photo_id)}/authorize-download")
+    assert authorized.status_code == 200
+
     outsider = client.application.test_client()
     login_technician_two(outsider)
-    response = outsider.get(PHOTO(1, photo_id))
-    assert response.status_code == 404
+    assert outsider.get(PHOTO(1, photo_id)).status_code == 404
+    assert outsider.get(f"{PHOTO(1, photo_id)}/authorize-download").status_code == 404
 
 
 def test_create_case_unknown_farm_returns_404(pest_case):
@@ -844,7 +917,7 @@ def _finalize(client, token, photos, case_id=1):
 
 def test_evidence_config_reports_storage_mode(pest_case):
     client, _, _, _ = pest_case
-    login_technician(client)
+    login_admin(client)
     local = client.get(f"/api/v1/pest-cases/1/evidence-photos/config")
     assert local.status_code == 200
     local_data = local.get_json()["data"]
@@ -865,7 +938,7 @@ def test_blob_upload_authorize_finalize_and_private_download(
     photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
     key = _blob_key()
     blob_store.objects[key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     authorized = _authorize_upload(client, token)
     assert authorized.status_code == 200
@@ -899,9 +972,13 @@ def test_blob_upload_authorize_finalize_and_private_download(
         == 404
     )
 
-    admin = client.application.test_client()
-    login_admin(admin)
-    assert admin.get(f"{PHOTOS(1)}/{photo.id}/authorize-download").status_code == 200
+    # Evidence intake is ADMIN-only, but a technician whose scope includes
+    # the case (assigned work in this fixture) can still read it.
+    assigned = client.application.test_client()
+    login_technician(assigned)
+    assigned_download = assigned.get(f"{PHOTOS(1)}/{photo.id}/authorize-download")
+    assert assigned_download.status_code == 200
+    assert assigned_download.get_json()["data"]["pathname"] == key
 
 
 def test_blob_finalize_is_idempotent_for_recorded_object(
@@ -911,7 +988,7 @@ def test_blob_finalize_is_idempotent_for_recorded_object(
     photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
     key = _blob_key()
     blob_store.objects[key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
     photo = {"pathname": key, "original_filename": "evidence.png"}
 
     assert _finalize(client, token, [photo]).status_code == 201
@@ -929,7 +1006,7 @@ def test_blob_finalize_rejects_recorded_retry_at_limit(
     _seed_recorded_photos(photo_store, keys)
     for key in keys:
         blob_store.objects[key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -950,7 +1027,7 @@ def test_blob_finalize_rejects_two_recorded_retries(
     _seed_recorded_photos(photo_store, keys)
     for key in keys:
         blob_store.objects[key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -975,7 +1052,7 @@ def test_blob_finalize_mixed_recorded_and_new_cleans_only_new(
     _seed_recorded_photos(photo_store, [recorded_key])
     blob_store.objects[recorded_key] = (PNG_BYTES, "image/png")
     blob_store.objects[new_key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -1000,7 +1077,7 @@ def test_blob_finalize_allows_new_photo_below_limit(
     _seed_recorded_photos(photo_store, recorded_keys)
     new_key = _blob_key(char="c")
     blob_store.objects[new_key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -1023,7 +1100,7 @@ def test_blob_finalize_rejects_new_photo_over_limit_and_keeps_recorded(
         blob_store.objects[key] = (PNG_BYTES, "image/png")
     new_key = _blob_key(char="d")
     blob_store.objects[new_key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -1070,7 +1147,7 @@ def test_blob_finalize_rejects_invalid_objects(
     blob_store.objects[key] = (body, head_type)
     if oversized:
         blob_store.sizes[key] = 5 * 1024 * 1024 + 1
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -1087,7 +1164,7 @@ def test_blob_finalize_rejects_wrong_case_key(pest_case, monkeypatch):
     photo_store, blob_store = _install_blob_evidence(monkeypatch, client)
     key = _blob_key(case_id=2)
     blob_store.objects[key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -1115,7 +1192,7 @@ def test_blob_finalize_rejects_more_than_three(pest_case, monkeypatch):
         )
     key = _blob_key()
     blob_store.objects[key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     assert _authorize_upload(client, token).status_code == 400
     response = _finalize(
@@ -1134,7 +1211,7 @@ def test_blob_finalize_rejects_wrong_workflow_state(pest_case, monkeypatch):
     store[1].status = PestCaseStatus.FIELD_VALIDATED.value
     key = _blob_key()
     blob_store.objects[key] = (PNG_BYTES, "image/png")
-    token = login_technician(client)
+    token = login_admin(client)
 
     response = _finalize(
         client,
@@ -1162,30 +1239,31 @@ def test_blob_admin_can_finalize_evidence(pest_case, monkeypatch):
     assert len(photo_store) == 1
 
 
-def test_blob_authorization_requires_scope_and_csrf(pest_case, monkeypatch):
+def test_blob_upload_authorization_requires_admin_and_csrf(pest_case, monkeypatch):
     client, _, _, _ = pest_case
     _install_blob_evidence(monkeypatch, client)
-    token = login_technician(client)
+    token = login_admin(client)
 
-    assert (
-        client.post(
-            "/api/v1/pest-cases/1/evidence-photos/upload-authorize",
-            json={},
-        ).status_code
-        == 403
+    missing_csrf = client.post(
+        "/api/v1/pest-cases/1/evidence-photos/upload-authorize",
+        json={},
+        headers={"Origin": ORIGIN},
     )
+    assert missing_csrf.status_code == 403
+    assert missing_csrf.get_json()["message"] == "CSRF validation failed."
+    assert _authorize_upload(client, token).status_code == 200
+
+    assigned = client.application.test_client()
+    assigned_token = login_technician(assigned)
+    _assert_permission_denied(_authorize_upload(assigned, assigned_token))
 
     outsider = client.application.test_client()
     outsider_token = login_technician_two(outsider)
-    assert _authorize_upload(outsider, outsider_token).status_code == 404
-
-    admin = client.application.test_client()
-    admin_token = login_admin(admin)
-    assert _authorize_upload(admin, admin_token).status_code == 200
+    _assert_permission_denied(_authorize_upload(outsider, outsider_token))
 
 
 def test_blob_mode_disables_multipart_evidence_endpoint(pest_case, monkeypatch):
     client, _, _, _ = pest_case
     _install_blob_evidence(monkeypatch, client)
-    token = login_technician(client)
+    token = login_admin(client)
     assert _upload(client, token).status_code == 409

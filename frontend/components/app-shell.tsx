@@ -6,7 +6,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { Icon, type IconName } from "@/components/icons";
+import { Icon } from "@/components/icons";
+import { StatusScreen } from "@/components/ui";
+import { routeAccess } from "@/lib/access-control";
 import { logout, type UserRole } from "@/lib/auth";
 import {
   BAIS_CITY_SEAL_ALT,
@@ -14,61 +16,7 @@ import {
   OFFICE_NAME,
   SYSTEM_NAME,
 } from "@/lib/branding";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: IconName;
-  adminOnly?: boolean;
-  /** In-page link to a section of another route; never marked active. */
-  section?: boolean;
-};
-
-type NavGroup = {
-  label: string;
-  items: NavItem[];
-};
-
-/*
- * Authorized navigation. Permission logic is intentionally unchanged:
- * every authenticated role sees the operational areas, while
- * User Management remains ADMIN-only (mirrors the /admin page redirect and
- * the ADMIN-only backend routes). Groups only organise existing routes;
- * the Farm Monitoring Map lives on the dashboard and links to its section.
- */
-const NAV_GROUPS: NavGroup[] = [
-  {
-    label: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: "dashboard" }],
-  },
-  {
-    label: "Records",
-    items: [
-      { href: "/farmers", label: "Farmers", icon: "farmers" },
-      { href: "/farms", label: "Farms", icon: "farm" },
-      { href: "/pest-cases", label: "Pest Cases", icon: "pest" },
-    ],
-  },
-  {
-    label: "Field Operations",
-    items: [
-      { href: "/inspections", label: "Inspections", icon: "inspection" },
-      { href: "/interventions", label: "Interventions", icon: "intervention" },
-      { href: "/follow-ups", label: "Follow-ups", icon: "follow-up" },
-    ],
-  },
-  {
-    label: "Monitoring",
-    items: [
-      { href: "/dashboard#farm-map", label: "Farm Monitoring Map", icon: "map", section: true },
-      { href: "/reports", label: "Reports", icon: "reports" },
-    ],
-  },
-  {
-    label: "Administration",
-    items: [{ href: "/admin", label: "User Management", icon: "user-admin", adminOnly: true }],
-  },
-];
+import { navigationFor, type NavGroup, type NavItem } from "@/lib/navigation";
 
 /*
  * Displays labels only. Underlying role values (ADMIN / TECHNICIAN)
@@ -156,6 +104,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [navOpen]);
 
+  // Route guard: an ADMIN-only page (Farmer, Farm, Pest Case Records, User
+  // Management) is never rendered for a role that may not open it, even when
+  // the URL is entered directly. The backend rejects the same APIs with 403.
+  const access =
+    auth.status === "authenticated" ? routeAccess(auth.user.role, pathname) : null;
+  const deniedRedirect = access !== null && !access.allowed ? access.redirectTo : null;
+  useEffect(() => {
+    if (deniedRedirect !== null) {
+      router.replace(deniedRedirect);
+    }
+  }, [deniedRedirect, router]);
+
   // Public routes and non-authenticated states render untouched so
   // existing loading / redirect / error UI is preserved exactly.
   if (pathname === "/" || pathname === "/login" || auth.status !== "authenticated") {
@@ -164,13 +124,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const currentUser = auth.user;
   const csrfToken = auth.csrfToken;
+  const pageAllowed = access?.allowed ?? false;
 
-  const visibleGroups = NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => !item.adminOnly || currentUser.role === "ADMIN"),
-  })).filter((group) => group.items.length > 0);
+  const visibleGroups = navigationFor(currentUser.role);
 
-  const crumbs = breadcrumbFor(pathname, visibleGroups);
+  const crumbs = pageAllowed ? breadcrumbFor(pathname, visibleGroups) : [];
 
   function closeNav() {
     setNavOpen(false);
@@ -332,7 +290,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
 
         <div id="gov-main-content" className="gov-main" tabIndex={-1}>
-          {children}
+          {pageAllowed ? (
+            children
+          ) : (
+            <StatusScreen
+              message={
+                deniedRedirect !== null
+                  ? "This page is available to Administrators only. Redirecting to your dashboard..."
+                  : "This page is available to Administrators only."
+              }
+            />
+          )}
         </div>
       </div>
     </div>

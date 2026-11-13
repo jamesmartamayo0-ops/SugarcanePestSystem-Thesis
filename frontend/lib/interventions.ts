@@ -1,5 +1,9 @@
 import { authenticatedFetch } from "@/lib/api";
-import type { PestCaseStatus } from "@/lib/pest-cases";
+import {
+  parsePestCaseSummaryList,
+  type PestCaseStatus,
+  type PestCaseSummary,
+} from "@/lib/pest-cases";
 
 export type InterventionMethodCategory =
   | "CULTURAL"
@@ -327,6 +331,32 @@ export async function listInterventions(
     return parseList(await readPayload(response));
   }
   throwForStatus(response.status, await readPayload(response), "Intervention list could not be read.");
+}
+
+/**
+ * Field Validated and Reintervention Required cases waiting for an
+ * intervention plan, limited by the backend to the caller's case scope.
+ * Used instead of the Administrator-only Pest Case list.
+ */
+export async function listInterventionEligibleCases(): Promise<PestCaseSummary[]> {
+  const fallback = "Eligible cases could not be read.";
+  let response: Response;
+  try {
+    response = await authenticatedFetch("/api/v1/interventions/eligible-cases", {
+      cache: "no-store",
+    });
+  } catch {
+    throw new InterventionsRequestError("unavailable", "Intervention service is unavailable.");
+  }
+  if (response.status === 200) {
+    const payload = await readPayload(response);
+    try {
+      return parsePestCaseSummaryList(payload);
+    } catch {
+      throw new InterventionsRequestError("unexpected", fallback);
+    }
+  }
+  throwForStatus(response.status, await readPayload(response), fallback);
 }
 
 export async function getIntervention(interventionId: number): Promise<InterventionDetail> {

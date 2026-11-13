@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { WorkflowSteps } from "@/components/workflow-steps";
 import { DetailSkeleton, TableSkeleton } from "@/components/skeleton";
+import { accessibleLinks } from "@/lib/access-control";
 import {
   FollowUpsRequestError,
   dueBadgeLabel,
@@ -346,13 +347,13 @@ export default function FollowUpsPage() {
       <PageHeader
         title="Follow-up & Reassessment"
         description="Record human reassessments for completed interventions. Outcomes are explicitly selected and never inferred. Resolved cases close; cases needing more work return for reintervention. History is preserved."
-        related={[
+        related={accessibleLinks(role, [
           { href: "/pest-cases", label: "Pest Cases" },
           { href: "/interventions", label: "Interventions" },
           { href: "/reports", label: "Reports" },
-        ]}
+        ])}
       />
-      <WorkflowSteps current="follow-up" />
+      <WorkflowSteps current="follow-up" role={role} />
 
         <section aria-labelledby="queue-heading" className="gov-card gov-record-section">
           <div className="gov-record-toolbar">
@@ -798,7 +799,7 @@ export default function FollowUpsPage() {
                         {workflowLabel(detail.outcome)}
                       </span>
                     </span>
-                    {detail.pest_case && (
+                    {detail.pest_case && role === "ADMIN" && (
                       <Link
                         href={`/pest-cases/${detail.pest_case.id}`}
                         className="gov-button gov-button-secondary gov-button-compact"

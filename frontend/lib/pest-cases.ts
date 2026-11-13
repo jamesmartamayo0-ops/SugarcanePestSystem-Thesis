@@ -144,6 +144,29 @@ function parseSummary(value: unknown): PestCaseSummary {
   };
 }
 
+function parseEvidencePhoto(photo: unknown, fallback: string): EvidencePhoto {
+  if (typeof photo !== "object" || photo === null) {
+    throw new PestCasesRequestError("unexpected", fallback);
+  }
+  const item = photo as Record<string, unknown>;
+  if (
+    typeof item.id !== "number" ||
+    typeof item.original_filename !== "string" ||
+    typeof item.content_type !== "string" ||
+    typeof item.byte_size !== "number" ||
+    (item.uploaded_at !== null && typeof item.uploaded_at !== "string")
+  ) {
+    throw new PestCasesRequestError("unexpected", fallback);
+  }
+  return {
+    id: item.id,
+    original_filename: item.original_filename,
+    content_type: item.content_type,
+    byte_size: item.byte_size,
+    uploaded_at: item.uploaded_at,
+  };
+}
+
 function parseDetail(value: unknown, fallback: string): PestCaseDetail {
   const summary = parseSummary(value);
   if (typeof value !== "object" || value === null) {
@@ -166,28 +189,9 @@ function parseDetail(value: unknown, fallback: string): PestCaseDetail {
   ) {
     throw new PestCasesRequestError("unexpected", fallback);
   }
-  const evidencePhotos: EvidencePhoto[] = entry.evidence_photos.map((photo) => {
-    if (typeof photo !== "object" || photo === null) {
-      throw new PestCasesRequestError("unexpected", fallback);
-    }
-    const item = photo as Record<string, unknown>;
-    if (
-      typeof item.id !== "number" ||
-      typeof item.original_filename !== "string" ||
-      typeof item.content_type !== "string" ||
-      typeof item.byte_size !== "number" ||
-      (item.uploaded_at !== null && typeof item.uploaded_at !== "string")
-    ) {
-      throw new PestCasesRequestError("unexpected", fallback);
-    }
-    return {
-      id: item.id,
-      original_filename: item.original_filename,
-      content_type: item.content_type,
-      byte_size: item.byte_size,
-      uploaded_at: item.uploaded_at,
-    };
-  });
+  const evidencePhotos: EvidencePhoto[] = entry.evidence_photos.map((photo) =>
+    parseEvidencePhoto(photo, fallback),
+  );
   const farmEntry = farm as Record<string, unknown>;
   const farmer = farmEntry.farmer;
   const reporterEntry = reporter as Record<string, unknown>;
@@ -261,6 +265,19 @@ function parseSingleCase(payload: unknown, fallback: string): PestCaseDetail {
 
 export function parsePestCaseDetail(value: unknown): PestCaseDetail {
   return parseDetail(value, "Case timeline could not be read.");
+}
+
+/** Validates a `{ data: { pest_cases: [...] } }` summary list from any scoped endpoint. */
+export function parsePestCaseSummaryList(payload: unknown): PestCaseSummary[] {
+  return parseCaseList(payload);
+}
+
+/** Validates an `evidence_photos` array using the same rules as the case detail. */
+export function parseEvidencePhotoList(value: unknown, fallback: string): EvidencePhoto[] {
+  if (!Array.isArray(value)) {
+    throw new PestCasesRequestError("unexpected", fallback);
+  }
+  return value.map((photo) => parseEvidencePhoto(photo, fallback));
 }
 
 function throwForStatus(status: number, payload: unknown, fallback: string): never {

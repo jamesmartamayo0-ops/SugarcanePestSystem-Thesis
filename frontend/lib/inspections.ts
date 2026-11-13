@@ -1,5 +1,9 @@
 import { authenticatedFetch } from "@/lib/api";
-import type { PestCaseStatus } from "@/lib/pest-cases";
+import {
+  parseEvidencePhotoList,
+  type EvidencePhoto,
+  type PestCaseStatus,
+} from "@/lib/pest-cases";
 
 export type TechnicianSummary = {
   id: number;
@@ -321,6 +325,86 @@ export async function getInspection(inspectionId: number): Promise<InspectionDet
     return parseSingle(await readPayload(response), "Inspection could not be read.");
   }
   throwForStatus(response.status, await readPayload(response), "Inspection could not be read.");
+}
+
+/**
+ * The case's initial report (farmer observation and evidence photos), read
+ * through the inspection. Pest Case Records are Administrator-only, so this
+ * scoped endpoint is how an assigned Agriculture Technician sees it.
+ */
+export type InspectionInitialReport = {
+  id: number;
+  pest_name: string | null;
+  symptoms: string | null;
+  observed_on: string | null;
+  reported_at: string | null;
+  reported_area_hectares: number;
+  evidence_photos: EvidencePhoto[];
+};
+
+function parseInitialReport(payload: unknown): InspectionInitialReport {
+  const fallback = "Initial report could not be read.";
+  const data =
+    typeof payload === "object" && payload !== null && "data" in payload
+      ? (payload as { data: unknown }).data
+      : null;
+  const report =
+    typeof data === "object" && data !== null && "initial_report" in data
+      ? (data as { initial_report: unknown }).initial_report
+      : null;
+  if (typeof report !== "object" || report === null) {
+    throw new InspectionsRequestError("unexpected", fallback);
+  }
+  const entry = report as Record<string, unknown>;
+  if (
+    typeof entry.id !== "number" ||
+    !Number.isSafeInteger(entry.id) ||
+    entry.id <= 0 ||
+    (entry.pest_name !== null && typeof entry.pest_name !== "string") ||
+    (entry.symptoms !== null && typeof entry.symptoms !== "string") ||
+    (entry.observed_on !== null && typeof entry.observed_on !== "string") ||
+    (entry.reported_at !== null && typeof entry.reported_at !== "string") ||
+    typeof entry.reported_area_hectares !== "number" ||
+    !Number.isFinite(entry.reported_area_hectares)
+  ) {
+    throw new InspectionsRequestError("unexpected", fallback);
+  }
+  let photos: EvidencePhoto[];
+  try {
+    photos = parseEvidencePhotoList(entry.evidence_photos, fallback);
+  } catch {
+    throw new InspectionsRequestError("unexpected", fallback);
+  }
+  return {
+    id: entry.id,
+    pest_name: entry.pest_name as string | null,
+    symptoms: entry.symptoms as string | null,
+    observed_on: entry.observed_on as string | null,
+    reported_at: entry.reported_at as string | null,
+    reported_area_hectares: entry.reported_area_hectares,
+    evidence_photos: photos,
+  };
+}
+
+export async function getInspectionInitialReport(
+  inspectionId: number,
+): Promise<InspectionInitialReport> {
+  let response: Response;
+  try {
+    response = await authenticatedFetch(`/api/v1/inspections/${inspectionId}/initial-report`, {
+      cache: "no-store",
+    });
+  } catch {
+    throw new InspectionsRequestError("unavailable", "Inspection service is unavailable.");
+  }
+  if (response.status === 200) {
+    return parseInitialReport(await readPayload(response));
+  }
+  throwForStatus(
+    response.status,
+    await readPayload(response),
+    "Initial report could not be read.",
+  );
 }
 
 export async function listTechnicians(): Promise<TechnicianSummary[]> {

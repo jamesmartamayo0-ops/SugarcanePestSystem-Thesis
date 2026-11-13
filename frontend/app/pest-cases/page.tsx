@@ -551,7 +551,7 @@ function PestCasesPageInner() {
           { href: "/reports", label: "Reports" },
         ]}
       />
-      <WorkflowSteps current="report" />
+      <WorkflowSteps current="report" role="ADMIN" />
 
         <section
           id="report-case"

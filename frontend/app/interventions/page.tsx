@@ -20,6 +20,7 @@ import {
   InterventionsRequestError,
   completeIntervention,
   getIntervention,
+  listInterventionEligibleCases,
   listInterventions,
   startIntervention,
   updateInterventionPlan,
@@ -28,11 +29,8 @@ import {
   type TechnicianSummary,
 } from "@/lib/interventions";
 import { listTechnicians } from "@/lib/inspections";
-import {
-  PestCasesRequestError,
-  listPestCases,
-  type PestCaseSummary,
-} from "@/lib/pest-cases";
+import type { PestCaseSummary } from "@/lib/pest-cases";
+import { accessibleLinks } from "@/lib/access-control";
 
 function todayIso(now: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -163,34 +161,27 @@ export default function InterventionsPage() {
       setLoading(true);
       setListError(null);
       try {
-        const [loadedInterventions, loadedValidated, loadedReintervention, loadedTechnicians] =
-          await Promise.all([
-            listInterventions({
-              pestCaseId: caseId === "all" ? undefined : Number(caseId),
-              assignedToUserId: technicianId === "all" ? undefined : Number(technicianId),
-            }),
-            listPestCases({ status: "FIELD_VALIDATED" }),
-            listPestCases({ status: "REINTERVENTION_REQUIRED" }),
-            listTechnicians(),
-          ]);
-        const loadedCases = [...loadedValidated, ...loadedReintervention].sort(
-          (left, right) => left.id - right.id,
-        );
+        const [loadedInterventions, loadedCases, loadedTechnicians] = await Promise.all([
+          listInterventions({
+            pestCaseId: caseId === "all" ? undefined : Number(caseId),
+            assignedToUserId: technicianId === "all" ? undefined : Number(technicianId),
+          }),
+          listInterventionEligibleCases(),
+          listTechnicians(),
+        ]);
         setInterventions(loadedInterventions);
         setEligibleCases(loadedCases);
         setTechnicians(loadedTechnicians);
       } catch (failure) {
         if (
-          (failure instanceof InterventionsRequestError &&
-            failure.kind === "unauthenticated") ||
-          (failure instanceof PestCasesRequestError && failure.kind === "unauthenticated")
+          failure instanceof InterventionsRequestError &&
+          failure.kind === "unauthenticated"
         ) {
           router.replace("/login");
           return;
         }
         setListError(
-          failure instanceof InterventionsRequestError ||
-            failure instanceof PestCasesRequestError
+          failure instanceof InterventionsRequestError
             ? failure.message
             : "Intervention records could not be read.",
         );
@@ -209,19 +200,14 @@ export default function InterventionsPage() {
     (async () => {
       setLoading(true);
       try {
-        const [loadedInterventions, loadedValidated, loadedReintervention, loadedTechnicians] =
-          await Promise.all([
-            listInterventions(),
-            listPestCases({ status: "FIELD_VALIDATED" }),
-            listPestCases({ status: "REINTERVENTION_REQUIRED" }),
-            listTechnicians(),
-          ]);
+        const [loadedInterventions, loadedCases, loadedTechnicians] = await Promise.all([
+          listInterventions(),
+          listInterventionEligibleCases(),
+          listTechnicians(),
+        ]);
         if (!active) {
           return;
         }
-        const loadedCases = [...loadedValidated, ...loadedReintervention].sort(
-          (left, right) => left.id - right.id,
-        );
         setInterventions(loadedInterventions);
         setEligibleCases(loadedCases);
         setTechnicians(loadedTechnicians);
@@ -231,16 +217,14 @@ export default function InterventionsPage() {
           return;
         }
         if (
-          (failure instanceof InterventionsRequestError &&
-            failure.kind === "unauthenticated") ||
-          (failure instanceof PestCasesRequestError && failure.kind === "unauthenticated")
+          failure instanceof InterventionsRequestError &&
+          failure.kind === "unauthenticated"
         ) {
           router.replace("/login");
           return;
         }
         setListError(
-          failure instanceof InterventionsRequestError ||
-            failure instanceof PestCasesRequestError
+          failure instanceof InterventionsRequestError
             ? failure.message
             : "Intervention records could not be read.",
         );
@@ -534,14 +518,14 @@ export default function InterventionsPage() {
       <PageHeader
         title="Interventions"
         description="Plan human-selected field actions for Field Validated and Reintervention Required cases, then record completion with a follow-up due date. Historical interventions are preserved so first and repeat cycles stay distinguishable."
-        related={[
+        related={accessibleLinks(role, [
           { href: "/pest-cases", label: "Pest Cases" },
           { href: "/inspections", label: "Inspections" },
           { href: "/follow-ups", label: "Follow-ups" },
           { href: "/reports", label: "Reports" },
-        ]}
+        ])}
       />
-      <WorkflowSteps current="intervention" />
+      <WorkflowSteps current="intervention" role={role} />
 
         <section aria-labelledby="start-intervention-heading" className="gov-card gov-record-section">
           <p className="gov-record-eyebrow">Intervention plan</p>
@@ -865,13 +849,15 @@ export default function InterventionsPage() {
                     <span className={statusBadge(detail.pest_case.status)}>
                       {workflowLabel(detail.pest_case.status)}
                     </span>
-                    <Link
-                      href={`/pest-cases/${detail.pest_case_id}`}
-                      className="gov-button gov-button-secondary gov-button-compact"
-                    >
-                      <Icon name="history" size={15} />
-                      Open case record
-                    </Link>
+                    {role === "ADMIN" && (
+                      <Link
+                        href={`/pest-cases/${detail.pest_case_id}`}
+                        className="gov-button gov-button-secondary gov-button-compact"
+                      >
+                        <Icon name="history" size={15} />
+                        Open case record
+                      </Link>
+                    )}
                   </span>
                 </div>
                 <dl className="gov-detail-grid">

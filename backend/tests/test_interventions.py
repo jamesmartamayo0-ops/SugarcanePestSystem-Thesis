@@ -540,6 +540,93 @@ def test_no_delete_endpoints_registered(intervention_client):
     assert all("DELETE" not in rule.methods for rule in start_rules)
 
 
+ELIGIBLE = "/api/v1/interventions/eligible-cases"
+
+
+def _install_scoped_eligible_cases(monkeypatch, cases, visible_to_tech1):
+    # SQL scoping is covered by the PostgreSQL privacy tests; this fake keeps
+    # the same contract: eligible statuses only, technician limited to scope.
+    def fake_eligible(user=None):
+        from flask import g
+
+        current = g.current_user
+        eligible = [
+            case
+            for case in sorted(cases.values(), key=lambda c: c.id)
+            if case.status
+            in (PestCaseStatus.FIELD_VALIDATED.value, PestCaseStatus.REINTERVENTION_REQUIRED.value)
+        ]
+        if current.role == "ADMIN":
+            return eligible
+        allowed = visible_to_tech1 if current.id == 2 else set()
+        return [case for case in eligible if case.id in allowed]
+
+    monkeypatch.setattr(interventions_module, "list_intervention_eligible_cases", fake_eligible)
+
+
+def test_eligible_cases_admin_and_scoped_technician(intervention_client, monkeypatch):
+    client, cases, _, _, _, _ = intervention_client
+    cases[2].status = PestCaseStatus.REINTERVENTION_REQUIRED.value
+    _install_scoped_eligible_cases(monkeypatch, cases, visible_to_tech1={1})
+
+    assert client.get(ELIGIBLE).status_code == 401
+
+    login_admin(client)
+    admin_view = client.get(ELIGIBLE)
+    assert admin_view.status_code == 200
+    assert admin_view.headers["Cache-Control"] == "no-store"
+    entries = admin_view.get_json()["data"]["pest_cases"]
+    assert [entry["id"] for entry in entries] == [1, 2, 4]
+    assert entries[0] == {
+        "id": 1,
+        "farm_id": 1,
+        "pest_name": "Stem Borer",
+        "reported_area_hectares": 2.5,
+        "status": "FIELD_VALIDATED",
+        "observed_on": "2026-09-15",
+        "reported_at": _stamp().isoformat(),
+    }
+
+    login_tech(client)
+    tech_view = client.get(ELIGIBLE)
+    assert tech_view.status_code == 200
+    assert [entry["id"] for entry in tech_view.get_json()["data"]["pest_cases"]] == [1]
+
+    login_tech2(client)
+    assert client.get(ELIGIBLE).get_json()["data"]["pest_cases"] == []
+
+
+def test_technician_starts_intervention_without_pest_case_records(intervention_client, monkeypatch):
+    client, cases, interventions, _, _, _ = intervention_client
+    _install_scoped_eligible_cases(monkeypatch, cases, visible_to_tech1={1})
+    token = login_tech(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+
+    eligible = client.get(ELIGIBLE).get_json()["data"]["pest_cases"]
+    assert [entry["id"] for entry in eligible] == [1]
+    started = client.post(START(1), json=start_payload(), headers=headers)
+    assert started.status_code == 201
+    assert cases[1].status == PestCaseStatus.UNDER_INTERVENTION.value
+
+    denied = client.get("/api/v1/pest-cases?status=FIELD_VALIDATED")
+    assert denied.status_code == 403
+    assert denied.get_json() == {"data": None, "message": "Permission denied."}
+
+
+def test_eligible_cases_database_errors_sanitized(intervention_client, monkeypatch):
+    client, _, _, _, _, _ = intervention_client
+    login_tech(client)
+
+    def fail(*_a, **_k):
+        raise SQLAlchemyError("internal eligible detail")
+
+    monkeypatch.setattr(interventions_module, "list_intervention_eligible_cases", fail)
+    response = client.get(ELIGIBLE)
+    assert response.status_code == 503
+    assert response.get_json() == {"data": None, "message": "Intervention service unavailable."}
+    assert "internal eligible detail" not in response.get_data(as_text=True)
+
+
 def test_neighboring_endpoints_regressed(intervention_client):
     client, _, _, _, _, _ = intervention_client
     login_admin(client)

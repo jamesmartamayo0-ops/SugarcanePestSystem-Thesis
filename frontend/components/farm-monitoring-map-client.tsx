@@ -38,7 +38,13 @@ function FitFarmBounds({ farms }: { farms: FarmMapFarm[] }) {
   return null;
 }
 
-export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[] }) {
+export default function FarmMonitoringMapClient({
+  farms,
+  showRecordLinks,
+}: {
+  farms: FarmMapFarm[];
+  showRecordLinks: boolean;
+}) {
   return (
     <MapContainer
       center={BAIS_MONITORING_CENTER}
@@ -117,7 +123,7 @@ export default function FarmMonitoringMapClient({ farms }: { farms: FarmMapFarm[
                 <p className="gov-map-popup-note">
                   Approximate farm location for monitoring reference only.
                 </p>
-                {farm.case && (
+                {farm.case && showRecordLinks && (
                   <div className="gov-map-popup-actions">
                     <a href={`/pest-cases/${farm.case.id}#case-summary`}>View case</a>
                     <a href={`/pest-cases/${farm.case.id}#timeline`}>View timeline</a>

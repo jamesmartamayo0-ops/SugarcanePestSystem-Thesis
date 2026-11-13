@@ -49,7 +49,13 @@ class MonitoringMapErrorBoundary extends Component<
   }
 }
 
-export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
+export default function FarmMonitoringMap({
+  farms,
+  showRecordLinks,
+}: {
+  farms: FarmMapFarm[];
+  showRecordLinks: boolean;
+}) {
   const [filter, setFilter] = useState<FarmMapFilter>("ALL");
   const mapped = useMemo(() => farmsForMap(farms, filter), [farms, filter]);
   const counts = useMemo(() => farmMapFilterCounts(farms), [farms]);
@@ -86,17 +92,23 @@ export default function FarmMonitoringMap({ farms }: { farms: FarmMapFarm[] }) {
           ) : (
             <span>
               No mapped farms available. Farms appear here once an approximate location is
-              recorded on the{" "}
-              <Link href="/farms" className="gov-activity-link">
-                Farms page
-              </Link>
-              .
+              recorded{showRecordLinks ? (
+                <>
+                  {" "}on the{" "}
+                  <Link href="/farms" className="gov-activity-link">
+                    Farms page
+                  </Link>
+                  .
+                </>
+              ) : (
+                "."
+              )}
             </span>
           )}
         </div>
       ) : (
         <MonitoringMapErrorBoundary key={filter}>
-          <FarmMonitoringMapClient farms={mapped} />
+          <FarmMonitoringMapClient farms={mapped} showRecordLinks={showRecordLinks} />
         </MonitoringMapErrorBoundary>
       )}
 

@@ -17,12 +17,14 @@ import { WorkflowSteps } from "@/components/workflow-steps";
 import {
   InspectionsRequestError,
   getInspection,
+  getInspectionInitialReport,
   listInspections,
   listTechnicians,
   recordFindings,
   rescheduleInspection,
   scheduleInspection,
   type InspectionDetail,
+  type InspectionInitialReport,
   type TechnicianSummary,
 } from "@/lib/inspections";
 import {
@@ -32,6 +34,7 @@ import {
   type PestCaseDetail,
   type PestCaseSummary,
 } from "@/lib/pest-cases";
+import { accessibleLinks } from "@/lib/access-control";
 import { EvidencePhotoGallery } from "@/components/evidence-photos";
 import {
   DetailSkeleton,
@@ -101,7 +104,9 @@ export default function InspectionsPage() {
   const [detail, setDetail] = useState<InspectionDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [caseRecord, setCaseRecord] = useState<PestCaseDetail | null>(null);
+  const [caseRecord, setCaseRecord] = useState<
+    PestCaseDetail | InspectionInitialReport | null
+  >(null);
   const [caseRecordError, setCaseRecordError] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
   const [recording, setRecording] = useState(false);
@@ -128,7 +133,11 @@ export default function InspectionsPage() {
             assignedToUserId:
               assignedFilter === "all" ? undefined : Number(assignedFilter),
           }),
-          listPestCases({ status: "FOR_INSPECTION" }),
+          // Pest Case Records are Administrator-only. Technicians never ask
+          // for them; their case context comes through the inspection.
+          role === "ADMIN"
+            ? listPestCases({ status: "FOR_INSPECTION" })
+            : Promise.resolve([]),
           listTechnicians(),
         ]);
         setInspections(loadedInspections);
@@ -153,7 +162,7 @@ export default function InspectionsPage() {
         setLoading(false);
       }
     },
-    [router],
+    [role, router],
   );
 
   useEffect(() => {
@@ -166,7 +175,9 @@ export default function InspectionsPage() {
       try {
         const [loadedInspections, loadedCases, loadedTechnicians] = await Promise.all([
           listInspections(),
-          listPestCases({ status: "FOR_INSPECTION" }),
+          role === "ADMIN"
+            ? listPestCases({ status: "FOR_INSPECTION" })
+            : Promise.resolve([]),
           listTechnicians(),
         ]);
         if (!active) {
@@ -203,7 +214,7 @@ export default function InspectionsPage() {
     return () => {
       active = false;
     };
-  }, [authenticated, router]);
+  }, [authenticated, role, router]);
 
   const openDetail = useCallback(
     async (inspectionId: number) => {
@@ -235,13 +246,19 @@ export default function InspectionsPage() {
       } finally {
         setLoadingDetail(false);
       }
-      // Read-only initial report owned by the Pest Case, loaded through the
-      // existing scoped case endpoint. Failure never blocks the inspection view.
+      // Read-only initial report owned by the Pest Case. Administrators read
+      // the case record; technicians read the same report through the
+      // inspection they are assigned to. Failure never blocks the view.
       try {
-        setCaseRecord(await getPestCase(loaded.pest_case_id));
+        setCaseRecord(
+          role === "ADMIN"
+            ? await getPestCase(loaded.pest_case_id)
+            : await getInspectionInitialReport(loaded.id),
+        );
       } catch (failure) {
         if (
-          failure instanceof PestCasesRequestError &&
+          (failure instanceof PestCasesRequestError ||
+            failure instanceof InspectionsRequestError) &&
           failure.kind === "unauthenticated"
         ) {
           router.replace("/login");
@@ -250,7 +267,7 @@ export default function InspectionsPage() {
         setCaseRecordError(true);
       }
     },
-    [router],
+    [role, router],
   );
 
   async function handleSchedule(event: FormEvent<HTMLFormElement>) {
@@ -491,13 +508,13 @@ export default function InspectionsPage() {
       <PageHeader
         title="Inspections"
         description="Schedule initial field inspections, reassign pending visits, and record validated findings. Reported area stays unchanged; validated area is the inspector's independent measurement."
-        related={[
+        related={accessibleLinks(role, [
           { href: "/pest-cases", label: "Pest Cases" },
           { href: "/interventions", label: "Interventions" },
           { href: "/reports", label: "Reports" },
-        ]}
+        ])}
       />
-      <WorkflowSteps current="inspection" />
+      <WorkflowSteps current="inspection" role={role} />
 
         {role === "ADMIN" && (
         <section aria-labelledby="schedule-heading" className="gov-card gov-record-section">
@@ -762,13 +779,15 @@ export default function InspectionsPage() {
                     <span className={statusBadge(detail.pest_case.status)}>
                       {workflowLabel(detail.pest_case.status)}
                     </span>
-                    <Link
-                      href={`/pest-cases/${detail.pest_case_id}`}
-                      className="gov-button gov-button-secondary gov-button-compact"
-                    >
-                      <Icon name="history" size={15} />
-                      Open case record
-                    </Link>
+                    {role === "ADMIN" && (
+                      <Link
+                        href={`/pest-cases/${detail.pest_case_id}`}
+                        className="gov-button gov-button-secondary gov-button-compact"
+                      >
+                        <Icon name="history" size={15} />
+                        Open case record
+                      </Link>
+                    )}
                   </span>
                 </div>
                 <dl className="gov-detail-grid">
@@ -825,7 +844,7 @@ export default function InspectionsPage() {
                         <dd className="gov-detail-value">
                           {initialReport.observation ??
                             (caseRecordError ? (
-                              "Unavailable — open the case record."
+                              "Unavailable — the initial report could not be loaded."
                             ) : (
                               <LoadingRegion label="Loading farmer observation">
                                 <SkeletonText lines={2} widths={["92%", "58%"]} />
@@ -851,7 +870,7 @@ export default function InspectionsPage() {
                             </>
                           ) : caseRecordError ? (
                             <span role="status">
-                              Evidence photos could not be loaded. Open the case record.
+                              Evidence photos could not be loaded.
                             </span>
                           ) : (
                             <EvidencePhotosSkeleton />

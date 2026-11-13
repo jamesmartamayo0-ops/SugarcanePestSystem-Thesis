@@ -9,6 +9,9 @@ from app.extensions import db
 from app.models import Farm, Farmer
 from app.scoping import apply_farm_scope, apply_farmer_scope, is_admin
 
+# Farmer Records are office administration: every endpoint is ADMIN-only.
+# Technicians receive the farmer context they need for assigned field work
+# through the scoped inspection, intervention, and follow-up payloads.
 farmers_bp = Blueprint("farmers", __name__, url_prefix="/api/v1/farmers")
 
 _CREATE_REQUIRED = frozenset({"full_name", "barangay"})
@@ -113,7 +116,7 @@ def _no_store_farmers_response(response):
 @farmers_bp.get("")
 @farmers_bp.get("/")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def list_farmers():
     try:
         farmers = list_all_farmers()
@@ -138,7 +141,7 @@ def list_farmers():
 
 @farmers_bp.get("/<int:farmer_id>")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def get_farmer(farmer_id: int):
     try:
         farmer = get_farmer_by_id(farmer_id)
@@ -163,7 +166,7 @@ def get_farmer(farmer_id: int):
 @farmers_bp.post("")
 @farmers_bp.post("/")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def create_farmer():
     if not request.is_json or (
         request.content_length is not None and request.content_length > 4096
@@ -209,7 +212,7 @@ def create_farmer():
 
 @farmers_bp.put("/<int:farmer_id>")
 @login_required
-@roles_required("ADMIN", "TECHNICIAN")
+@roles_required("ADMIN")
 def update_farmer(farmer_id: int):
     if not request.is_json or (
         request.content_length is not None and request.content_length > 4096

@@ -5,7 +5,15 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from app import auth, create_app
-from app.models import Farm, Farmer, Inspection, PestCase, PestCaseStatus, User
+from app.models import (
+    Farm,
+    Farmer,
+    Inspection,
+    PestCase,
+    PestCaseEvidencePhoto,
+    PestCaseStatus,
+    User,
+)
 from app.models.inspection import (
     manila_today,
     normalize_findings,
@@ -23,6 +31,7 @@ INSPECTIONS = "/api/v1/inspections"
 INSPECTION = lambda i: f"/api/v1/inspections/{i}"  # noqa: E731
 RESCHEDULE = lambda i: f"/api/v1/inspections/{i}/schedule"  # noqa: E731
 FINDINGS = lambda i: f"/api/v1/inspections/{i}/record-findings"  # noqa: E731
+INITIAL_REPORT = lambda i: f"/api/v1/inspections/{i}/initial-report"  # noqa: E731
 SCHEDULE = lambda c: f"/api/v1/pest-cases/{c}/schedule-inspection"  # noqa: E731
 LOGIN = "/api/v1/auth/login"
 ORIGIN = "http://localhost:3000"
@@ -617,6 +626,128 @@ def test_assigned_vs_unrelated_technician_permissions(inspection_client):
     token1 = login_tech(client)
     headers1 = {"Origin": ORIGIN, "X-CSRF-Token": token1}
     assert client.post(FINDINGS(10), json=payload, headers=headers1).status_code == 200
+
+
+def _install_initial_report_photos(monkeypatch):
+    photo = PestCaseEvidencePhoto(
+        pest_case_id=3,
+        stored_name="ev/3/" + "a" * 32 + ".png",
+        original_filename="leaf-damage.png",
+        content_type="image/png",
+        byte_size=2048,
+        uploaded_by_user_id=1,
+    )
+    photo.id = 7
+    photo.uploaded_at = _stamp()
+    monkeypatch.setattr(
+        inspections_module,
+        "list_case_evidence_photos",
+        lambda case_id: [photo] if case_id == 3 else [],
+    )
+
+
+def test_initial_report_is_scoped_to_the_assigned_inspection(inspection_client, monkeypatch):
+    client, _, _, _, _, _ = inspection_client
+    _install_initial_report_photos(monkeypatch)
+    expected = {
+        "id": 3,
+        "pest_name": "Stem Borer",
+        "symptoms": "Bored stalks",
+        "observed_on": "2026-09-15",
+        "reported_at": _stamp().isoformat(),
+        "reported_area_hectares": 2.5,
+        "evidence_photos": [
+            {
+                "id": 7,
+                "original_filename": "leaf-damage.png",
+                "content_type": "image/png",
+                "byte_size": 2048,
+                "uploaded_at": _stamp().isoformat(),
+            }
+        ],
+    }
+
+    assert client.get(INITIAL_REPORT(10)).status_code == 401
+
+    login_tech(client)  # assignee of inspection 10
+    response = client.get(INITIAL_REPORT(10))
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.get_json()["data"]["initial_report"] == expected
+    # Only initial-report fields; no reporter account or other user data.
+    raw = response.get_data(as_text=True)
+    for forbidden in ("reporter", "username", "password", "contact_number"):
+        assert forbidden not in raw
+
+    login_tech2(client)  # not assigned to inspection 10
+    unrelated = client.get(INITIAL_REPORT(10))
+    assert unrelated.status_code == 404
+    assert unrelated.get_json() == {"data": None, "message": "Inspection not found."}
+
+    login_admin(client)
+    assert client.get(INITIAL_REPORT(10)).get_json()["data"]["initial_report"] == expected
+    assert client.get(INITIAL_REPORT(999)).status_code == 404
+
+
+def test_initial_report_database_errors_sanitized(inspection_client, monkeypatch):
+    client, _, _, _, _, _ = inspection_client
+    login_tech(client)
+
+    def fail(_case_id):
+        raise SQLAlchemyError("internal evidence detail")
+
+    monkeypatch.setattr(inspections_module, "list_case_evidence_photos", fail)
+    response = client.get(INITIAL_REPORT(10))
+    assert response.status_code == 503
+    assert response.get_json() == {"data": None, "message": "Inspection service unavailable."}
+    assert "internal evidence detail" not in response.get_data(as_text=True)
+
+
+def test_assigned_technician_field_workflow_without_record_administration(
+    inspection_client, monkeypatch
+):
+    client, cases, inspections, _, _, _ = inspection_client
+    _install_initial_report_photos(monkeypatch)
+    token = login_tech(client)
+    headers = {"Origin": ORIGIN, "X-CSRF-Token": token}
+
+    # Field work for the assigned inspection keeps working end to end.
+    listed = client.get(INSPECTIONS)
+    assert listed.status_code == 200
+    assert 10 in [item["id"] for item in listed.get_json()["data"]["inspections"]]
+    detail = client.get(INSPECTION(10)).get_json()["data"]["inspection"]
+    assert detail["pest_case"]["pest_name"] == "Stem Borer"
+    assert detail["pest_case"]["reported_area_hectares"] == 2.5
+    assert detail["pest_case"]["farm"]["plot_identifier"] == "Plot A"
+    assert detail["pest_case"]["farm"]["farmer"]["full_name"] == "Juan Dela Cruz"
+    report = client.get(INITIAL_REPORT(10)).get_json()["data"]["initial_report"]
+    assert report["symptoms"] == "Bored stalks"
+    assert [photo["id"] for photo in report["evidence_photos"]] == [7]
+
+    recorded = client.post(
+        FINDINGS(10),
+        json={
+            "findings": "Bored stalks confirmed on site",
+            "pest_confirmed": True,
+            "confirmed_pest_name": "Stem Borer",
+            "validated_area_hectares": 1.5,
+            "inspected_on": "2026-10-07",
+        },
+        headers=headers,
+    )
+    assert recorded.status_code == 200
+    body = recorded.get_json()["data"]["inspection"]
+    assert body["confirmed_pest_name"] == "Stem Borer"
+    assert body["pest_case"]["status"] == PestCaseStatus.FIELD_VALIDATED.value
+    assert inspections[10].completed_by_user_id == 2
+    assert cases[3].status == PestCaseStatus.FIELD_VALIDATED.value
+
+    # The same session still cannot open the administration records.
+    for path in ("/api/v1/pest-cases", "/api/v1/pest-cases/3", "/api/v1/pest-cases/3/timeline",
+                 "/api/v1/farmers", "/api/v1/farmers/1", "/api/v1/farms", "/api/v1/farms/1"):
+        denied = client.get(path)
+        assert denied.status_code == 403, path
+        assert denied.get_json() == {"data": None, "message": "Permission denied."}
 
 
 def test_transaction_rollback_on_invalid_findings(inspection_client):
